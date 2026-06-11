@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight } from 'lucide-react';
-import { loadTasks, saveTasks, newTask, loadCategories, saveCategories } from './lib/storage';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader } from 'lucide-react';
+import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
 import PriorityBadge from './components/PriorityBadge';
@@ -18,6 +18,11 @@ function formatDate(str) {
 function isOverdue(dueDate, done) {
   if (done || !dueDate) return false;
   return new Date(dueDate) < new Date(new Date().toDateString());
+}
+
+function newTaskTemplate() {
+  const today = new Date().toISOString().split('T')[0];
+  return { id: crypto.randomUUID(), name: '', owner: '', dueDate: today, priority: 'medium', lastUpdate: today, notes: '', done: false, categoryId: '' };
 }
 
 function CategoryBadge({ categoryId, categories }) {
@@ -52,17 +57,13 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
         {tasks.map(task => (
           <tr key={task.id} className={`task-row ${task.done ? 'row-done' : ''}`}>
             <td>
-              <button className="check-btn" onClick={() => onToggle(task.id)} aria-label={task.done ? 'Mark incomplete' : 'Mark complete'}>
+              <button className="check-btn" onClick={() => onToggle(task)} aria-label={task.done ? 'Mark incomplete' : 'Mark complete'}>
                 {task.done ? <CheckCircle2 size={18} color="var(--accent)" /> : <Circle size={18} color="var(--text-tertiary)" />}
               </button>
             </td>
-            <td>
-              <span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span>
-            </td>
+            <td><span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
             <td className="cell-secondary">{task.owner || '—'}</td>
-            {showCategory && (
-              <td><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>
-            )}
+            {showCategory && <td><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>}
             <td className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
               {formatDate(task.dueDate)}
               {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
@@ -92,23 +93,14 @@ function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories })
   return (
     <div className="group-section">
       <button className="group-header" onClick={() => setCollapsed(c => !c)} aria-expanded={!collapsed}>
-        <span className="group-chevron">
-          {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
-        </span>
+        <span className="group-chevron">{collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}</span>
         <span className="group-dot" style={{ background: group.color }} />
         <span className="group-label">{group.label}</span>
         <span className="group-count">{group.tasks.length}</span>
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable
-            tasks={group.tasks}
-            onToggle={onToggle}
-            onEdit={onEdit}
-            onDelete={onDelete}
-            categories={categories}
-            showCategory={false}
-          />
+          <TaskTable tasks={group.tasks} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} />
         </div>
       )}
     </div>
@@ -116,8 +108,10 @@ function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories })
 }
 
 export default function App() {
-  const [tasks, setTasksRaw] = useState(loadTasks);
-  const [categories, setCategoriesRaw] = useState(loadCategories);
+  const [tasks, setTasks] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -126,33 +120,57 @@ export default function App() {
   const [modalTask, setModalTask] = useState(null);
   const [showCatManager, setShowCatManager] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const setTasks = (t) => { setTasksRaw(t); saveTasks(t); };
-  const setCategories = (c) => { setCategoriesRaw(c); saveCategories(c); };
+  useEffect(() => {
+    Promise.all([fetchTasks(), fetchCategories()])
+      .then(([t, c]) => {
+        setTasks(t.map(rowToTask));
+        setCategories(c);
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
 
-  const openNew = () => setModalTask(newTask());
+  const openNew = () => setModalTask(newTaskTemplate());
   const openEdit = (task) => setModalTask({ ...task });
 
-  const handleSave = (saved) => {
-    setTasks(tasks.some(t => t.id === saved.id)
-      ? tasks.map(t => t.id === saved.id ? saved : t)
-      : [saved, ...tasks]);
-    setModalTask(null);
-  };
+  const handleSave = useCallback(async (saved) => {
+    setSaving(true);
+    try {
+      const isNew = !tasks.find(t => t.id === saved.id);
+      const result = isNew ? await createTask(saved) : await updateTask(saved);
+      setTasks(prev => isNew ? [result, ...prev] : prev.map(t => t.id === result.id ? result : t));
+      setModalTask(null);
+    } catch (e) { alert('Failed to save: ' + e.message); }
+    finally { setSaving(false); }
+  }, [tasks]);
 
-  const handleSaveCategories = (cats) => {
-    const removedIds = categories.filter(c => !cats.find(nc => nc.id === c.id)).map(c => c.id);
-    if (removedIds.length) setTasks(tasks.map(t => removedIds.includes(t.categoryId) ? { ...t, categoryId: '' } : t));
-    setCategories(cats);
-    setShowCatManager(false);
-  };
-
-  const toggleDone = (id) => {
+  const handleToggle = useCallback(async (task) => {
     const today = new Date().toISOString().split('T')[0];
-    setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done, lastUpdate: today } : t));
-  };
+    const updated = { ...task, done: !task.done, lastUpdate: today };
+    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+    try { await updateTask(updated); }
+    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
+  }, []);
 
-  const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
+  const handleDelete = useCallback(async (id) => {
+    setTasks(prev => prev.filter(t => t.id !== id));
+    try { await dbDeleteTask(id); }
+    catch (e) { alert('Failed to delete: ' + e.message); }
+  }, []);
+
+  const handleSaveCategories = useCallback(async (incoming) => {
+    setSaving(true);
+    try {
+      const final = await replaceCategories(incoming, categories);
+      setCategories(final);
+      const removedIds = categories.filter(c => !final.find(f => f.id === c.id)).map(c => c.id);
+      if (removedIds.length) setTasks(prev => prev.map(t => removedIds.includes(t.categoryId) ? { ...t, categoryId: '' } : t));
+      setShowCatManager(false);
+    } catch (e) { alert('Failed to save categories: ' + e.message); }
+    finally { setSaving(false); }
+  }, [categories]);
 
   const filtered = useMemo(() => {
     return tasks
@@ -188,6 +206,19 @@ export default function App() {
     return [...map.entries()].filter(([, g]) => g.tasks.length > 0);
   }, [filtered, categories, groupByCategory]);
 
+  if (loading) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 10, color: 'var(--text-tertiary)' }}>
+      <Loader size={20} className="spin" /> Loading tasks…
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', gap: 10, color: '#DC2626' }}>
+      <p style={{ fontWeight: 500 }}>Could not connect to database</p>
+      <p style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>{error}</p>
+    </div>
+  );
+
   return (
     <div className="layout">
       <header className="header">
@@ -197,6 +228,7 @@ export default function App() {
             <h1 className="brand-name">TaskFlow</h1>
           </div>
           <div className="header-meta">
+            {saving && <Loader size={14} className="spin" style={{ color: 'var(--text-tertiary)' }} />}
             <span className="progress-text">{doneCount} / {totalCount} done</span>
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: totalCount ? `${(doneCount / totalCount) * 100}%` : '0%' }} />
@@ -212,19 +244,14 @@ export default function App() {
             <input className="search-input" type="text" placeholder="Search tasks or owners…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
           <div className="toolbar-right">
-            <button className={`filter-toggle ${groupByCategory ? 'active' : ''}`} onClick={() => setGroupByCategory(g => !g)} title="Group by category">
-              <Tag size={15} />
-              Group
+            <button className={`filter-toggle ${groupByCategory ? 'active' : ''}`} onClick={() => setGroupByCategory(g => !g)}>
+              <Tag size={15} /> Group
             </button>
             <button className={`filter-toggle ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters(s => !s)}>
-              <SlidersHorizontal size={15} />
-              Filters
+              <SlidersHorizontal size={15} /> Filters
             </button>
             <button className="btn-secondary" onClick={() => setShowCatManager(true)}>Categories</button>
-            <button className="btn-primary" onClick={openNew}>
-              <Plus size={15} />
-              New task
-            </button>
+            <button className="btn-primary" onClick={openNew}><Plus size={15} /> New task</button>
           </div>
         </div>
 
@@ -232,9 +259,7 @@ export default function App() {
           <div className="filter-bar">
             <div className="filter-group">
               <span className="filter-label">Status</span>
-              {FILTERS.map(f => (
-                <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>{f}</button>
-              ))}
+              {FILTERS.map(f => <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>{f}</button>)}
             </div>
             <div className="filter-group">
               <span className="filter-label">Priority</span>
@@ -267,15 +292,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup
-                key={id}
-                id={id}
-                group={group}
-                onToggle={toggleDone}
-                onEdit={openEdit}
-                onDelete={deleteTask}
-                categories={categories}
-              />
+              <CollapsibleGroup key={id} id={id} group={group} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} />
             ))}
           </div>
         ) : (
@@ -287,25 +304,14 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable
-                tasks={filtered}
-                onToggle={toggleDone}
-                onEdit={openEdit}
-                onDelete={deleteTask}
-                categories={categories}
-                showCategory={true}
-              />
+              <TaskTable tasks={filtered} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} />
             )}
           </div>
         )}
       </main>
 
-      {modalTask && (
-        <TaskModal task={modalTask} categories={categories} onSave={handleSave} onClose={() => setModalTask(null)} />
-      )}
-      {showCatManager && (
-        <CategoryManager categories={categories} onSave={handleSaveCategories} onClose={() => setShowCatManager(false)} />
-      )}
+      {modalTask && <TaskModal task={modalTask} categories={categories} onSave={handleSave} onClose={() => setModalTask(null)} />}
+      {showCatManager && <CategoryManager categories={categories} onSave={handleSaveCategories} onClose={() => setShowCatManager(false)} />}
     </div>
   );
 }
