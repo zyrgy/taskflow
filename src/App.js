@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader } from 'lucide-react';
-import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask } from './lib/supabase';
+import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut } from 'lucide-react';
+import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getValidSession, signOut } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
+import LoginPage from './components/LoginPage';
 import PriorityBadge from './components/PriorityBadge';
 import './App.css';
 
@@ -108,6 +109,7 @@ function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories })
 }
 
 export default function App() {
+  const [session, setSession] = useState(undefined); // undefined = loading, null = logged out
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -123,14 +125,31 @@ export default function App() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    async function init() {
+      // Handle OAuth callback
+      const params = new URLSearchParams(window.location.search);
+      const code = params.get('code');
+      if (code) {
+        try {
+          const { exchangeCodeForSession } = await import('./lib/supabase');
+          await exchangeCodeForSession(code);
+          window.history.replaceState({}, '', window.location.pathname);
+        } catch (e) { console.error('Auth error', e); }
+      }
+      const s = await getValidSession();
+      setSession(s || null);
+    }
+    init();
+  }, []);
+
+  useEffect(() => {
+    if (!session) return;
+    setLoading(true);
     Promise.all([fetchTasks(), fetchCategories()])
-      .then(([t, c]) => {
-        setTasks(t.map(rowToTask));
-        setCategories(c);
-      })
+      .then(([t, c]) => { setTasks(t.map(rowToTask)); setCategories(c); })
       .catch(e => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [session]);
 
   const openNew = () => setModalTask(newTaskTemplate());
   const openEdit = (task) => setModalTask({ ...task });
@@ -206,6 +225,16 @@ export default function App() {
     return [...map.entries()].filter(([, g]) => g.tasks.length > 0);
   }, [filtered, categories, groupByCategory]);
 
+  const handleSignOut = async () => { await signOut(); setSession(null); setTasks([]); setCategories([]); };
+
+  if (session === undefined) return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 10, color: 'var(--text-tertiary)' }}>
+      <Loader size={20} className="spin" /> Loading…
+    </div>
+  );
+
+  if (!session) return <LoginPage />;
+
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 10, color: 'var(--text-tertiary)' }}>
       <Loader size={20} className="spin" /> Loading tasks…
@@ -233,6 +262,9 @@ export default function App() {
             <div className="progress-bar">
               <div className="progress-fill" style={{ width: totalCount ? `${(doneCount / totalCount) * 100}%` : '0%' }} />
             </div>
+            <button onClick={handleSignOut} style={{ border: 'none', background: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, marginLeft: 8 }} title="Sign out">
+              <LogOut size={15} /> Sign out
+            </button>
           </div>
         </div>
       </header>
