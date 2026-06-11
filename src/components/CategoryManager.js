@@ -65,6 +65,7 @@ export default function CategoryManager({ categories, onSave, onClose }) {
                 onChange={e => { setNewName(e.target.value); setError(''); }}
                 onKeyDown={e => e.key === 'Enter' && add()}
                 style={styles.input}
+                dir="auto"
               />
               <button style={styles.addBtn} onClick={add}><Plus size={15} /> Add</button>
             </div>
