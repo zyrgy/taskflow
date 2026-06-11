@@ -139,13 +139,14 @@ export default function App() {
                 <th>Due date</th>
                 <th>Priority</th>
                 <th>Last updated</th>
+                <th>Notes</th>
                 <th style={{ width: 72 }}></th>
               </tr>
             </thead>
             <tbody>
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="empty-row">
+                  <td colSpan={8} className="empty-row">
                     <div className="empty-state">
                       <CheckCircle2 size={28} strokeWidth={1.5} />
                       <p>No tasks match your filters</p>
@@ -171,7 +172,6 @@ export default function App() {
                   <td>
                     <div className="task-name-cell">
                       <span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span>
-                      {task.notes && <span className="task-note-hint" title={task.notes}>Note</span>}
                     </div>
                   </td>
                   <td className="cell-secondary">{task.owner || '—'}</td>
@@ -181,6 +181,15 @@ export default function App() {
                   </td>
                   <td><PriorityBadge priority={task.priority} /></td>
                   <td className="cell-secondary">{formatDate(task.lastUpdate)}</td>
+                  <td>
+                    {task.notes
+                      ? <span className="notes-tooltip-wrap">
+                          <span className="task-note-hint">Note</span>
+                          <span className="notes-tooltip">{task.notes}</span>
+                        </span>
+                      : <span className="cell-secondary">—</span>
+                    }
+                  </td>
                   <td>
                     <div className="row-actions">
                       <button className="action-btn" onClick={() => openEdit(task)} aria-label="Edit task">
