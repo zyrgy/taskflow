@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut } from 'lucide-react';
-import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getValidSession, signOut } from './lib/supabase';
+import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getSession, signOut, onAuthStateChange } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
 import LoginPage from './components/LoginPage';
@@ -125,21 +125,11 @@ export default function App() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    async function init() {
-      // Handle OAuth callback
-      const params = new URLSearchParams(window.location.search);
-      const code = params.get('code');
-      if (code) {
-        try {
-          const { exchangeCodeForSession } = await import('./lib/supabase');
-          await exchangeCodeForSession(code);
-          window.history.replaceState({}, '', window.location.pathname);
-        } catch (e) { console.error('Auth error', e); }
-      }
-      const s = await getValidSession();
-      setSession(s || null);
-    }
-    init();
+    // Get initial session
+    getSession().then(s => setSession(s || null));
+    // Listen for auth changes
+    const { data: { subscription } } = onAuthStateChange(s => setSession(s || null));
+    return () => subscription.unsubscribe();
   }, []);
 
   useEffect(() => {
