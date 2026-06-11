@@ -1,7 +1,8 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal } from 'lucide-react';
-import { loadTasks, saveTasks, newTask } from './lib/storage';
+import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag } from 'lucide-react';
+import { loadTasks, saveTasks, newTask, loadCategories, saveCategories } from './lib/storage';
 import TaskModal from './components/TaskModal';
+import CategoryManager from './components/CategoryManager';
 import PriorityBadge from './components/PriorityBadge';
 import './App.css';
 
@@ -19,15 +20,72 @@ function isOverdue(dueDate, done) {
   return new Date(dueDate) < new Date(new Date().toDateString());
 }
 
+function TaskTable({ tasks, onToggle, onEdit, onDelete, categories }) {
+  if (tasks.length === 0) return null;
+  return (
+    <table className="table">
+      <thead>
+        <tr>
+          <th style={{ width: 44 }}></th>
+          <th>Task</th>
+          <th>Owner</th>
+          <th>Due date</th>
+          <th>Priority</th>
+          <th>Last updated</th>
+          <th>Notes</th>
+          <th style={{ width: 80 }}></th>
+        </tr>
+      </thead>
+      <tbody>
+        {tasks.map(task => (
+          <tr key={task.id} className={`task-row ${task.done ? 'row-done' : ''}`}>
+            <td>
+              <button className="check-btn" onClick={() => onToggle(task.id)} aria-label={task.done ? 'Mark incomplete' : 'Mark complete'}>
+                {task.done ? <CheckCircle2 size={18} color="var(--accent)" /> : <Circle size={18} color="var(--text-tertiary)" />}
+              </button>
+            </td>
+            <td>
+              <span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span>
+            </td>
+            <td className="cell-secondary">{task.owner || '—'}</td>
+            <td className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
+              {formatDate(task.dueDate)}
+              {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
+            </td>
+            <td><PriorityBadge priority={task.priority} /></td>
+            <td className="cell-secondary">{formatDate(task.lastUpdate)}</td>
+            <td>
+              {task.notes
+                ? <span className="notes-tooltip-wrap"><span className="task-note-hint">Note</span><span className="notes-tooltip">{task.notes}</span></span>
+                : <span className="cell-secondary">—</span>}
+            </td>
+            <td>
+              <div className="row-actions">
+                <button className="action-btn" onClick={() => onEdit(task)} aria-label="Edit task"><Pencil size={14} /></button>
+                <button className="action-btn action-delete" onClick={() => onDelete(task.id)} aria-label="Delete task"><Trash2 size={14} /></button>
+              </div>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 export default function App() {
   const [tasks, setTasksRaw] = useState(loadTasks);
+  const [categories, setCategoriesRaw] = useState(loadCategories);
   const [filter, setFilter] = useState('All');
   const [search, setSearch] = useState('');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [groupByCategory, setGroupByCategory] = useState(false);
   const [modalTask, setModalTask] = useState(null);
+  const [showCatManager, setShowCatManager] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
 
   const setTasks = (t) => { setTasksRaw(t); saveTasks(t); };
+  const setCategories = (c) => { setCategoriesRaw(c); saveCategories(c); };
 
   const openNew = () => setModalTask(newTask());
   const openEdit = (task) => setModalTask({ ...task });
@@ -35,9 +93,15 @@ export default function App() {
   const handleSave = (saved) => {
     setTasks(tasks.some(t => t.id === saved.id)
       ? tasks.map(t => t.id === saved.id ? saved : t)
-      : [saved, ...tasks]
-    );
+      : [saved, ...tasks]);
     setModalTask(null);
+  };
+
+  const handleSaveCategories = (cats) => {
+    const removedIds = categories.filter(c => !cats.find(nc => nc.id === c.id)).map(c => c.id);
+    if (removedIds.length) setTasks(tasks.map(t => removedIds.includes(t.categoryId) ? { ...t, categoryId: '' } : t));
+    setCategories(cats);
+    setShowCatManager(false);
   };
 
   const toggleDone = (id) => {
@@ -47,12 +111,13 @@ export default function App() {
 
   const deleteTask = (id) => setTasks(tasks.filter(t => t.id !== id));
 
-  const visible = useMemo(() => {
+  const filtered = useMemo(() => {
     return tasks
       .filter(t => {
         if (filter === 'To do' && t.done) return false;
         if (filter === 'Done' && !t.done) return false;
         if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
+        if (categoryFilter !== 'all' && t.categoryId !== categoryFilter) return false;
         if (search) {
           const q = search.toLowerCase();
           return t.name.toLowerCase().includes(q) || t.owner.toLowerCase().includes(q);
@@ -63,10 +128,22 @@ export default function App() {
         if (a.done !== b.done) return a.done ? 1 : -1;
         return (PRIORITIES_ORDER[a.priority] ?? 1) - (PRIORITIES_ORDER[b.priority] ?? 1);
       });
-  }, [tasks, filter, search, priorityFilter]);
+  }, [tasks, filter, search, priorityFilter, categoryFilter]);
 
   const doneCount = tasks.filter(t => t.done).length;
   const totalCount = tasks.length;
+
+  const groups = useMemo(() => {
+    if (!groupByCategory) return null;
+    const map = new Map();
+    map.set('', { label: 'Uncategorized', color: '#A09D94', tasks: [] });
+    categories.forEach(c => map.set(c.id, { label: c.name, color: c.color, tasks: [] }));
+    filtered.forEach(t => {
+      const key = (t.categoryId && map.has(t.categoryId)) ? t.categoryId : '';
+      map.get(key).tasks.push(t);
+    });
+    return [...map.entries()].filter(([, g]) => g.tasks.length > 0);
+  }, [filtered, categories, groupByCategory]);
 
   return (
     <div className="layout">
@@ -79,7 +156,7 @@ export default function App() {
           <div className="header-meta">
             <span className="progress-text">{doneCount} / {totalCount} done</span>
             <div className="progress-bar">
-              <div className="progress-fill" style={{ width: totalCount ? `${(doneCount/totalCount)*100}%` : '0%' }} />
+              <div className="progress-fill" style={{ width: totalCount ? `${(doneCount / totalCount) * 100}%` : '0%' }} />
             </div>
           </div>
         </div>
@@ -89,19 +166,19 @@ export default function App() {
         <div className="toolbar">
           <div className="search-wrap">
             <Search size={15} className="search-icon" />
-            <input
-              className="search-input"
-              type="text"
-              placeholder="Search tasks or owners…"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-            />
+            <input className="search-input" type="text" placeholder="Search tasks or owners…" value={search} onChange={e => setSearch(e.target.value)} />
           </div>
-
           <div className="toolbar-right">
+            <button className={`filter-toggle ${groupByCategory ? 'active' : ''}`} onClick={() => setGroupByCategory(g => !g)} title="Group by category">
+              <Tag size={15} />
+              Group
+            </button>
             <button className={`filter-toggle ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters(s => !s)}>
               <SlidersHorizontal size={15} />
               Filters
+            </button>
+            <button className="btn-secondary" onClick={() => setShowCatManager(true)}>
+              Categories
             </button>
             <button className="btn-primary" onClick={openNew}>
               <Plus size={15} />
@@ -120,95 +197,67 @@ export default function App() {
             </div>
             <div className="filter-group">
               <span className="filter-label">Priority</span>
-              {['all','high','medium','low'].map(p => (
+              {['all', 'high', 'medium', 'low'].map(p => (
                 <button key={p} className={`chip ${priorityFilter === p ? 'chip-active' : ''}`} onClick={() => setPriorityFilter(p)}>
                   {p === 'all' ? 'All' : p.charAt(0).toUpperCase() + p.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="filter-group">
+              <span className="filter-label">Category</span>
+              <button className={`chip ${categoryFilter === 'all' ? 'chip-active' : ''}`} onClick={() => setCategoryFilter('all')}>All</button>
+              {categories.map(c => (
+                <button key={c.id} className={`chip ${categoryFilter === c.id ? 'chip-active' : ''}`} onClick={() => setCategoryFilter(c.id)}>
+                  <span style={{ display:'inline-block', width:8, height:8, borderRadius:'50%', background:c.color, marginRight:5, verticalAlign:'middle' }} />
+                  {c.name}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        <div className="table-wrap">
-          <table className="table">
-            <thead>
-              <tr>
-                <th style={{ width: 36 }}></th>
-                <th>Task</th>
-                <th>Owner</th>
-                <th>Due date</th>
-                <th>Priority</th>
-                <th>Last updated</th>
-                <th>Notes</th>
-                <th style={{ width: 72 }}></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="empty-row">
-                    <div className="empty-state">
-                      <CheckCircle2 size={28} strokeWidth={1.5} />
-                      <p>No tasks match your filters</p>
-                      <button className="btn-ghost" onClick={openNew}>Add one now</button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-              {visible.map(task => (
-                <tr key={task.id} className={`task-row ${task.done ? 'row-done' : ''}`}>
-                  <td>
-                    <button
-                      className="check-btn"
-                      onClick={() => toggleDone(task.id)}
-                      aria-label={task.done ? 'Mark incomplete' : 'Mark complete'}
-                    >
-                      {task.done
-                        ? <CheckCircle2 size={18} color="var(--accent)" />
-                        : <Circle size={18} color="var(--text-tertiary)" />
-                      }
-                    </button>
-                  </td>
-                  <td>
-                    <div className="task-name-cell">
-                      <span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span>
-                    </div>
-                  </td>
-                  <td className="cell-secondary">{task.owner || '—'}</td>
-                  <td className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
-                    {formatDate(task.dueDate)}
-                    {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
-                  </td>
-                  <td><PriorityBadge priority={task.priority} /></td>
-                  <td className="cell-secondary">{formatDate(task.lastUpdate)}</td>
-                  <td>
-                    {task.notes
-                      ? <span className="notes-tooltip-wrap">
-                          <span className="task-note-hint">Note</span>
-                          <span className="notes-tooltip">{task.notes}</span>
-                        </span>
-                      : <span className="cell-secondary">—</span>
-                    }
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="action-btn" onClick={() => openEdit(task)} aria-label="Edit task">
-                        <Pencil size={14} />
-                      </button>
-                      <button className="action-btn action-delete" onClick={() => deleteTask(task.id)} aria-label="Delete task">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        {groupByCategory ? (
+          <div className="groups">
+            {groups && groups.length === 0 && (
+              <div className="empty-state-standalone">
+                <CheckCircle2 size={28} strokeWidth={1.5} />
+                <p>No tasks match your filters</p>
+                <button className="btn-ghost" onClick={openNew}>Add one now</button>
+              </div>
+            )}
+            {groups && groups.map(([id, group]) => (
+              <div key={id} className="group-section">
+                <div className="group-header">
+                  <span className="group-dot" style={{ background: group.color }} />
+                  <span className="group-label">{group.label}</span>
+                  <span className="group-count">{group.tasks.length}</span>
+                </div>
+                <div className="table-wrap">
+                  <TaskTable tasks={group.tasks} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} categories={categories} />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="table-wrap">
+            {filtered.length === 0 ? (
+              <div className="empty-state-standalone">
+                <CheckCircle2 size={28} strokeWidth={1.5} />
+                <p>No tasks match your filters</p>
+                <button className="btn-ghost" onClick={openNew}>Add one now</button>
+              </div>
+            ) : (
+              <TaskTable tasks={filtered} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} categories={categories} />
+            )}
+          </div>
+        )}
       </main>
 
       {modalTask && (
-        <TaskModal task={modalTask} onSave={handleSave} onClose={() => setModalTask(null)} />
+        <TaskModal task={modalTask} categories={categories} onSave={handleSave} onClose={() => setModalTask(null)} />
+      )}
+      {showCatManager && (
+        <CategoryManager categories={categories} onSave={handleSaveCategories} onClose={() => setShowCatManager(false)} />
       )}
     </div>
   );
