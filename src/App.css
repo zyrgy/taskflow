@@ -297,3 +297,22 @@
 .group-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .group-label { font-size: 13px; font-weight: 600; color: var(--text-primary); }
 .group-count { font-size: 11px; padding: 1px 7px; background: var(--bg); color: var(--text-tertiary); border: 1px solid var(--border); border-radius: 10px; }
+
+.cat-badge {
+  display: inline-flex; align-items: center;
+  padding: 2px 8px;
+  border-radius: 20px;
+  font-size: 12px; font-weight: 500;
+  white-space: nowrap;
+}
+
+.group-header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  background: none; border: none; cursor: pointer;
+  border-radius: var(--radius-sm);
+  width: 100%; text-align: left;
+  transition: background 0.12s;
+}
+.group-header:hover { background: var(--border); }
+.group-chevron { color: var(--text-tertiary); display: flex; align-items: center; }

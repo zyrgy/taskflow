@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag } from 'lucide-react';
+import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight } from 'lucide-react';
 import { loadTasks, saveTasks, newTask, loadCategories, saveCategories } from './lib/storage';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
@@ -20,7 +20,18 @@ function isOverdue(dueDate, done) {
   return new Date(dueDate) < new Date(new Date().toDateString());
 }
 
-function TaskTable({ tasks, onToggle, onEdit, onDelete, categories }) {
+function CategoryBadge({ categoryId, categories }) {
+  const cat = categories.find(c => c.id === categoryId);
+  if (!cat) return <span className="cell-secondary">—</span>;
+  return (
+    <span className="cat-badge" style={{ background: cat.color + '18', color: cat.color, border: `1px solid ${cat.color}40` }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', background: cat.color, display: 'inline-block', marginRight: 5, flexShrink: 0 }} />
+      {cat.name}
+    </span>
+  );
+}
+
+function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory }) {
   if (tasks.length === 0) return null;
   return (
     <table className="table">
@@ -29,6 +40,7 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories }) {
           <th style={{ width: 44 }}></th>
           <th>Task</th>
           <th>Owner</th>
+          {showCategory && <th>Category</th>}
           <th>Due date</th>
           <th>Priority</th>
           <th>Last updated</th>
@@ -48,6 +60,9 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories }) {
               <span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span>
             </td>
             <td className="cell-secondary">{task.owner || '—'}</td>
+            {showCategory && (
+              <td><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>
+            )}
             <td className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
               {formatDate(task.dueDate)}
               {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
@@ -69,6 +84,34 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories }) {
         ))}
       </tbody>
     </table>
+  );
+}
+
+function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories }) {
+  const [collapsed, setCollapsed] = useState(false);
+  return (
+    <div className="group-section">
+      <button className="group-header" onClick={() => setCollapsed(c => !c)} aria-expanded={!collapsed}>
+        <span className="group-chevron">
+          {collapsed ? <ChevronRight size={15} /> : <ChevronDown size={15} />}
+        </span>
+        <span className="group-dot" style={{ background: group.color }} />
+        <span className="group-label">{group.label}</span>
+        <span className="group-count">{group.tasks.length}</span>
+      </button>
+      {!collapsed && (
+        <div className="table-wrap">
+          <TaskTable
+            tasks={group.tasks}
+            onToggle={onToggle}
+            onEdit={onEdit}
+            onDelete={onDelete}
+            categories={categories}
+            showCategory={false}
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -177,9 +220,7 @@ export default function App() {
               <SlidersHorizontal size={15} />
               Filters
             </button>
-            <button className="btn-secondary" onClick={() => setShowCatManager(true)}>
-              Categories
-            </button>
+            <button className="btn-secondary" onClick={() => setShowCatManager(true)}>Categories</button>
             <button className="btn-primary" onClick={openNew}>
               <Plus size={15} />
               New task
@@ -208,7 +249,7 @@ export default function App() {
               <button className={`chip ${categoryFilter === 'all' ? 'chip-active' : ''}`} onClick={() => setCategoryFilter('all')}>All</button>
               {categories.map(c => (
                 <button key={c.id} className={`chip ${categoryFilter === c.id ? 'chip-active' : ''}`} onClick={() => setCategoryFilter(c.id)}>
-                  <span style={{ display:'inline-block', width:8, height:8, borderRadius:'50%', background:c.color, marginRight:5, verticalAlign:'middle' }} />
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: c.color, marginRight: 5, verticalAlign: 'middle' }} />
                   {c.name}
                 </button>
               ))}
@@ -226,16 +267,15 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <div key={id} className="group-section">
-                <div className="group-header">
-                  <span className="group-dot" style={{ background: group.color }} />
-                  <span className="group-label">{group.label}</span>
-                  <span className="group-count">{group.tasks.length}</span>
-                </div>
-                <div className="table-wrap">
-                  <TaskTable tasks={group.tasks} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} categories={categories} />
-                </div>
-              </div>
+              <CollapsibleGroup
+                key={id}
+                id={id}
+                group={group}
+                onToggle={toggleDone}
+                onEdit={openEdit}
+                onDelete={deleteTask}
+                categories={categories}
+              />
             ))}
           </div>
         ) : (
@@ -247,7 +287,14 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onToggle={toggleDone} onEdit={openEdit} onDelete={deleteTask} categories={categories} />
+              <TaskTable
+                tasks={filtered}
+                onToggle={toggleDone}
+                onEdit={openEdit}
+                onDelete={deleteTask}
+                categories={categories}
+                showCategory={true}
+              />
             )}
           </div>
         )}
