@@ -3,7 +3,7 @@ import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, 
 import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getSession, signOut, onAuthStateChange } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
-import LoginPage from './components/LoginPage';
+import ImportModal from './components/ImportModal';
 import PriorityBadge from './components/PriorityBadge';
 import './App.css';
 
@@ -121,6 +121,7 @@ export default function App() {
   const [groupByCategory, setGroupByCategory] = useState(false);
   const [modalTask, setModalTask] = useState(null);
   const [showCatManager, setShowCatManager] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -135,10 +136,21 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     setLoading(true);
-    Promise.all([fetchTasks(), fetchCategories()])
-      .then(([t, c]) => { setTasks(t.map(rowToTask)); setCategories(c); })
-      .catch(e => setError(e.message))
-      .finally(() => setLoading(false));
+    // First check if this user is authorized
+    import('./lib/supabase').then(({ supabase }) => {
+      supabase.from('allowed_users').select('email').eq('email', session.user.email).single()
+        .then(({ data }) => {
+          if (!data) {
+            setError('unauthorized');
+            setLoading(false);
+            return;
+          }
+          return Promise.all([fetchTasks(), fetchCategories()])
+            .then(([t, c]) => { setTasks(t.map(rowToTask)); setCategories(c); })
+            .catch(e => setError(e.message));
+        })
+        .finally(() => setLoading(false));
+    });
   }, [session]);
 
   const openNew = () => setModalTask(newTaskTemplate());
@@ -215,7 +227,15 @@ export default function App() {
     return [...map.entries()].filter(([, g]) => g.tasks.length > 0);
   }, [filtered, categories, groupByCategory]);
 
-  const handleSignOut = async () => { await signOut(); setSession(null); setTasks([]); setCategories([]); };
+  const handleImport = useCallback(async (importedTasks) => {
+    setSaving(true);
+    try {
+      const created = await Promise.all(importedTasks.map(t => createTask(t)));
+      setTasks(prev => [...prev, ...created]);
+      setShowImport(false);
+    } catch (e) { alert('Import failed: ' + e.message); }
+    finally { setSaving(false); }
+  }, []); await signOut(); setSession(null); setTasks([]); setCategories([]); };
 
   if (session === undefined) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 10, color: 'var(--text-tertiary)' }}>
@@ -228,6 +248,23 @@ export default function App() {
   if (loading) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 10, color: 'var(--text-tertiary)' }}>
       <Loader size={20} className="spin" /> Loading tasks…
+    </div>
+  );
+
+  if (error === 'unauthorized') return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg)', padding: '1rem' }}>
+      <div style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)', padding: '2.5rem 2rem', width: '100%', maxWidth: '360px', textAlign: 'center', boxShadow: 'var(--shadow-sm)' }}>
+        <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--high-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+          <LogOut size={20} color="var(--high-text)" />
+        </div>
+        <h2 style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 8 }}>Access denied</h2>
+        <p style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: '1.5rem' }}>
+          Your account ({session?.user?.email}) is not authorized to access this app. Contact the admin to request access.
+        </p>
+        <button onClick={handleSignOut} style={{ padding: '8px 20px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'none', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: 14 }}>
+          Sign out
+        </button>
+      </div>
     </div>
   );
 
@@ -272,6 +309,7 @@ export default function App() {
             <button className={`filter-toggle ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters(s => !s)}>
               <SlidersHorizontal size={15} /> Filters
             </button>
+            <button className="btn-secondary" onClick={() => setShowImport(true)}>Import</button>
             <button className="btn-secondary" onClick={() => setShowCatManager(true)}>Categories</button>
             <button className="btn-primary" onClick={openNew}><Plus size={15} /> New task</button>
           </div>
@@ -332,6 +370,7 @@ export default function App() {
         )}
       </main>
 
+      {showImport && <ImportModal categories={categories} onImport={handleImport} onClose={() => setShowImport(false)} />}
       {modalTask && <TaskModal task={modalTask} categories={categories} onSave={handleSave} onClose={() => setModalTask(null)} />}
       {showCatManager && <CategoryManager categories={categories} onSave={handleSaveCategories} onClose={() => setShowCatManager(false)} />}
     </div>
