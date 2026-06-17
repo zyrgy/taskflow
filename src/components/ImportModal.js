@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { X, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 const PRIORITY_MAP = {
   'high': 'high', 'גבוה': 'high',
@@ -9,7 +10,6 @@ const PRIORITY_MAP = {
 
 function normalizeDate(val) {
   if (!val) return '';
-  // Excel serial number
   if (typeof val === 'number') {
     const date = XLSX.SSF.parse_date_code(val);
     if (date) {
@@ -18,34 +18,26 @@ function normalizeDate(val) {
       return `${date.y}-${m}-${d}`;
     }
   }
-  // String date — try to parse
   const str = String(val).trim();
   if (!str) return '';
-  // Already YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
-  // DD/MM/YYYY
   const dmyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
   if (dmyMatch) return `${dmyMatch[3]}-${dmyMatch[2].padStart(2,'0')}-${dmyMatch[1].padStart(2,'0')}`;
-  // MM/DD/YYYY
-  const mdyMatch = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mdyMatch) return `${mdyMatch[3]}-${mdyMatch[1].padStart(2,'0')}-${mdyMatch[2].padStart(2,'0')}`;
   const d = new Date(str);
   if (!isNaN(d)) return d.toISOString().split('T')[0];
   return '';
 }
 
-function parseRows(sheet, XLSX) {
+function parseRows(sheet) {
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
   const today = new Date().toISOString().split('T')[0];
   const tasks = [];
   const errors = [];
 
   rows.forEach((row, i) => {
-    // Normalize keys to lowercase
     const r = Object.fromEntries(Object.entries(row).map(([k, v]) => [k.toLowerCase().trim(), v]));
     const name = (r['task name'] || r['name'] || r['task'] || '').toString().trim();
     if (!name) { errors.push(`Row ${i + 2}: missing task name`); return; }
-
     const priority = PRIORITY_MAP[(r['priority'] || '').toString().toLowerCase().trim()] || 'medium';
     tasks.push({
       id: crypto.randomUUID(),
@@ -64,7 +56,7 @@ function parseRows(sheet, XLSX) {
   return { tasks, errors };
 }
 
-export default function ImportModal({ categories, onImport, onClose }) {
+export default function ImportModal({ onImport, onClose }) {
   const [preview, setPreview] = useState(null);
   const [errors, setErrors] = useState([]);
   const [fileName, setFileName] = useState('');
@@ -77,12 +69,11 @@ export default function ImportModal({ categories, onImport, onClose }) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        const XLSX = require('xlsx');
         const wb = XLSX.read(e.target.result, { type: 'array' });
         const sheet = wb.Sheets[wb.SheetNames[0]];
-        const { tasks, errors } = parseRows(sheet, XLSX);
+        const { tasks, errors: errs } = parseRows(sheet);
         setPreview(tasks);
-        setErrors(errors);
+        setErrors(errs);
       } catch (err) {
         console.error('Import error:', err);
         setErrors([`Could not read file: ${err.message}`]);
@@ -114,16 +105,13 @@ export default function ImportModal({ categories, onImport, onClose }) {
                 onDragOver={e => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={handleDrop}
+                onClick={() => inputRef.current.click()}
               >
                 <Upload size={24} color="var(--text-tertiary)" />
-                <p style={styles.dropText}>Drop your Excel file here</p>
+                <p style={styles.dropText}>Drop your Excel file here or <span style={styles.dropLink}>browse</span></p>
                 <p style={styles.dropHint}>.xlsx or .xls files</p>
-                <label style={styles.browseBtn}>
-                  Browse file
-                  <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => processFile(e.target.files[0])} />
-                </label>
+                <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => processFile(e.target.files[0])} />
               </div>
-
               <div style={styles.hint}>
                 <p style={styles.hintTitle}>Expected columns:</p>
                 <p style={styles.hintText}>Task Name, Owner, Due Date, Priority (high/medium/low), Last Update, Notes</p>
@@ -135,9 +123,8 @@ export default function ImportModal({ categories, onImport, onClose }) {
                 <CheckCircle2 size={16} color="var(--low-text)" />
                 <span style={{ fontSize: 14 }}><strong>{preview.length}</strong> tasks ready to import from <em>{fileName}</em></span>
               </div>
-
               {errors.length > 0 && (
-                <div style={styles.errors}>
+                <div style={styles.errorsBox}>
                   <AlertCircle size={14} color="var(--high-text)" />
                   <div>
                     <p style={{ fontSize: 13, fontWeight: 500, color: 'var(--high-text)' }}>{errors.length} rows skipped:</p>
@@ -145,7 +132,6 @@ export default function ImportModal({ categories, onImport, onClose }) {
                   </div>
                 </div>
               )}
-
               <div style={styles.previewWrap}>
                 <table style={styles.previewTable}>
                   <thead>
@@ -160,11 +146,12 @@ export default function ImportModal({ categories, onImport, onClose }) {
                         <td style={styles.td}>{t.priority}</td>
                       </tr>
                     ))}
-                    {preview.length > 5 && <tr><td colSpan={4} style={{ ...styles.td, color: 'var(--text-tertiary)', textAlign: 'center' }}>…and {preview.length - 5} more</td></tr>}
+                    {preview.length > 5 && (
+                      <tr><td colSpan={4} style={{ ...styles.td, color: 'var(--text-tertiary)', textAlign: 'center' }}>…and {preview.length - 5} more</td></tr>
+                    )}
                   </tbody>
                 </table>
               </div>
-
               <button style={styles.resetBtn} onClick={() => { setPreview(null); setErrors([]); setFileName(''); }}>
                 Choose a different file
               </button>
@@ -196,13 +183,12 @@ const styles = {
   dropzoneDragging: { borderColor: 'var(--accent)', background: 'var(--accent-light)' },
   dropText: { fontSize: '14px', color: 'var(--text-secondary)' },
   dropLink: { color: 'var(--accent)', fontWeight: 500 },
-  browseBtn: { display: 'inline-block', padding: '7px 16px', background: 'var(--text-primary)', color: 'var(--surface)', borderRadius: 'var(--radius-sm)', fontSize: 13, fontWeight: 500, cursor: 'pointer', marginTop: 4 },
   dropHint: { fontSize: '12px', color: 'var(--text-tertiary)' },
   hint: { background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' },
   hintTitle: { fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 },
   hintText: { fontSize: '12px', color: 'var(--text-tertiary)' },
   summary: { display: 'flex', alignItems: 'center', gap: 8, padding: '10px 12px', background: 'var(--low-bg)', border: '1px solid var(--low-border)', borderRadius: 'var(--radius-sm)' },
-  errors: { display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--high-bg)', border: '1px solid var(--high-border)', borderRadius: 'var(--radius-sm)' },
+  errorsBox: { display: 'flex', gap: 8, padding: '10px 12px', background: 'var(--high-bg)', border: '1px solid var(--high-border)', borderRadius: 'var(--radius-sm)' },
   previewWrap: { border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', overflow: 'hidden' },
   previewTable: { width: '100%', borderCollapse: 'collapse' },
   th: { padding: '8px 10px', textAlign: 'left', fontSize: '11px', fontWeight: 500, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.05em', background: 'var(--bg)', borderBottom: '1px solid var(--border)' },
