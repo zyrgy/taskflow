@@ -4,6 +4,7 @@ import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDe
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
 import ImportModal from './components/ImportModal';
+import LoginPage from './components/LoginPage';
 import PriorityBadge from './components/PriorityBadge';
 import './App.css';
 
