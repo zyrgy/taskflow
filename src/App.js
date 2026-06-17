@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut } from 'lucide-react';
-import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getSession, signOut, onAuthStateChange } from './lib/supabase';
+import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getSession, signOut, onAuthStateChange, supabase } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
 import ImportModal from './components/ImportModal';
@@ -138,7 +138,6 @@ export default function App() {
     setLoading(true);
     async function load() {
       try {
-        const { supabase } = await import('./lib/supabase');
         const { data } = await supabase.from('allowed_users').select('email').eq('email', session.user.email).single();
         if (!data) { setError('unauthorized'); setLoading(false); return; }
         const [t, c] = await Promise.all([fetchTasks(), fetchCategories()]);
