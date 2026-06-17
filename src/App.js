@@ -136,21 +136,18 @@ export default function App() {
   useEffect(() => {
     if (!session) return;
     setLoading(true);
-    // First check if this user is authorized
-    import('./lib/supabase').then(({ supabase }) => {
-      supabase.from('allowed_users').select('email').eq('email', session.user.email).single()
-        .then(({ data }) => {
-          if (!data) {
-            setError('unauthorized');
-            setLoading(false);
-            return;
-          }
-          return Promise.all([fetchTasks(), fetchCategories()])
-            .then(([t, c]) => { setTasks(t.map(rowToTask)); setCategories(c); })
-            .catch(e => setError(e.message));
-        })
-        .finally(() => setLoading(false));
-    });
+    async function load() {
+      try {
+        const { supabase } = await import('./lib/supabase');
+        const { data } = await supabase.from('allowed_users').select('email').eq('email', session.user.email).single();
+        if (!data) { setError('unauthorized'); setLoading(false); return; }
+        const [t, c] = await Promise.all([fetchTasks(), fetchCategories()]);
+        setTasks(t.map(rowToTask));
+        setCategories(c);
+      } catch (e) { setError(e.message); }
+      finally { setLoading(false); }
+    }
+    load();
   }, [session]);
 
   const openNew = () => setModalTask(newTaskTemplate());
