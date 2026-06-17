@@ -4,7 +4,7 @@ import * as XLSX from 'xlsx';
 
 const PRIORITY_MAP = {
   'high': 'high', 'גבוה': 'high',
-  'medium': 'medium', 'med': 'medium', 'בינוני': 'medium', 'medium': 'medium',
+  'medium': 'medium', 'med': 'medium', 'בינוני': 'medium',
   'low': 'low', 'נמוך': 'low',
 };
 
