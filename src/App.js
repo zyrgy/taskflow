@@ -232,7 +232,9 @@ export default function App() {
       setShowImport(false);
     } catch (e) { alert('Import failed: ' + e.message); }
     finally { setSaving(false); }
-  }, []); await signOut(); setSession(null); setTasks([]); setCategories([]); };
+  }, []);
+
+  const handleSignOut = async () => { await signOut(); setSession(null); setTasks([]); setCategories([]); };
 
   if (session === undefined) return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', gap: 10, color: 'var(--text-tertiary)' }}>
