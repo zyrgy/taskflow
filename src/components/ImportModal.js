@@ -1,6 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { X, Upload, AlertCircle, CheckCircle2 } from 'lucide-react';
-import * as XLSX from 'xlsx';
 
 const PRIORITY_MAP = {
   'high': 'high', 'גבוה': 'high',
@@ -35,7 +34,7 @@ function normalizeDate(val) {
   return '';
 }
 
-function parseRows(sheet) {
+function parseRows(sheet, XLSX) {
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
   const today = new Date().toISOString().split('T')[0];
   const tasks = [];
@@ -78,12 +77,14 @@ export default function ImportModal({ categories, onImport, onClose }) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
+        const XLSX = require('xlsx');
         const wb = XLSX.read(e.target.result, { type: 'array' });
         const sheet = wb.Sheets[wb.SheetNames[0]];
-        const { tasks, errors } = parseRows(sheet);
+        const { tasks, errors } = parseRows(sheet, XLSX);
         setPreview(tasks);
         setErrors(errors);
       } catch (err) {
+        console.error('Import error:', err);
         setErrors([`Could not read file: ${err.message}`]);
         setPreview(null);
       }
@@ -113,12 +114,14 @@ export default function ImportModal({ categories, onImport, onClose }) {
                 onDragOver={e => { e.preventDefault(); setDragging(true); }}
                 onDragLeave={() => setDragging(false)}
                 onDrop={handleDrop}
-                onClick={() => inputRef.current.click()}
               >
                 <Upload size={24} color="var(--text-tertiary)" />
-                <p style={styles.dropText}>Drop your Excel file here or <span style={styles.dropLink}>browse</span></p>
+                <p style={styles.dropText}>Drop your Excel file here</p>
                 <p style={styles.dropHint}>.xlsx or .xls files</p>
-                <input ref={inputRef} type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => processFile(e.target.files[0])} />
+                <label style={styles.browseBtn}>
+                  Browse file
+                  <input type="file" accept=".xlsx,.xls" style={{ display: 'none' }} onChange={e => processFile(e.target.files[0])} />
+                </label>
               </div>
 
               <div style={styles.hint}>
@@ -193,6 +196,7 @@ const styles = {
   dropzoneDragging: { borderColor: 'var(--accent)', background: 'var(--accent-light)' },
   dropText: { fontSize: '14px', color: 'var(--text-secondary)' },
   dropLink: { color: 'var(--accent)', fontWeight: 500 },
+  browseBtn: { display: 'inline-block', padding: '7px 16px', background: 'var(--text-primary)', color: 'var(--surface)', borderRadius: 'var(--radius-sm)', fontSize: 13, fontWeight: 500, cursor: 'pointer', marginTop: 4 },
   dropHint: { fontSize: '12px', color: 'var(--text-tertiary)' },
   hint: { background: 'var(--bg)', borderRadius: 'var(--radius-sm)', padding: '10px 12px' },
   hintTitle: { fontSize: '12px', fontWeight: 500, color: 'var(--text-secondary)', marginBottom: 4 },
