@@ -69,8 +69,12 @@ export async function createTask(task) {
 }
 
 export async function updateTask(task) {
-  const { data, error } = await supabase.from('tasks').update(taskToRow(task)).eq('id', task.id).select().single();
-  if (error) throw new Error(error.message);
+  const row = taskToRow(task);
+  delete row.id;
+  console.log('Updating task', task.id, row);
+  const { data, error } = await supabase.from('tasks').update(row).eq('id', task.id).select().single();
+  if (error) { console.error('Update error', error); throw new Error(error.message); }
+  console.log('Update result', data);
   return rowToTask(data);
 }
 
