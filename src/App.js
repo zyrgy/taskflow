@@ -185,7 +185,7 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [sortKey, setSortKey] = useState('');
+  const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
   const [visibleCols, setVisibleCols] = useState(['name','owner','category','dueDate','priority','lastUpdate','notes']);
   const [showColPicker, setShowColPicker] = useState(false);
@@ -196,10 +196,12 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Get initial session
     getSession().then(s => setSession(s || null));
-    // Listen for auth changes
-    const { data: { subscription } } = onAuthStateChange(s => setSession(s || null));
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        setSession(s || null);
+      }
+    });
     return () => subscription.unsubscribe();
   }, []);
 
