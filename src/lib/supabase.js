@@ -25,6 +25,12 @@ export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange((_event, session) => callback(session));
 }
 
+export async function fetchAllowedUsers() {
+  const { data, error } = await supabase.from('allowed_users').select('email');
+  if (error) throw new Error(error.message);
+  return data.map(r => r.email);
+}
+
 export async function fetchCategories() {
   const { data, error } = await supabase.from('categories').select('*').order('created_at');
   if (error) throw new Error(error.message);
