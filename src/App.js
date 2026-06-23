@@ -186,6 +186,8 @@ function CollapsibleGroup({ id, group, onStatusCycle, onEdit, onDelete, categori
   );
 }
 
+const STATUS_CYCLE = ['Open', 'In progress', 'Done', 'Stuck'];
+
 export default function App() {
   const [session, setSession] = useState(undefined); // undefined = loading, null = logged out
   const [tasks, setTasks] = useState([]);
@@ -251,7 +253,6 @@ export default function App() {
     });
   }, []);
 
-  const STATUS_CYCLE = ['Open', 'In progress', 'Done', 'Stuck'];
   const handleStatusCycle = useCallback(async (task) => {
     const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(task.status || 'Open') + 1) % STATUS_CYCLE.length];
     const today = new Date().toISOString().split('T')[0];
