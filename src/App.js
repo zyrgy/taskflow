@@ -211,7 +211,7 @@ export default function App() {
         const { data } = await supabase.from('allowed_users').select('email').eq('email', session.user.email).single();
         if (!data) { setError('unauthorized'); setLoading(false); return; }
         const [t, c] = await Promise.all([fetchTasks(), fetchCategories()]);
-        setTasks(t.map(rowToTask));
+        setTasks(t);
         setCategories(c);
       } catch (e) { setError(e.message); }
       finally { setLoading(false); }
