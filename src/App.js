@@ -57,14 +57,45 @@ const STATUS_CONFIG = {
   'Stuck':       { bg: '#FEF2F2', color: '#991B1B', border: '#FECACA' },
 };
 
-function StatusBadge({ status, onClick }) {
+function StatusBadge({ status, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef();
   const c = STATUS_CONFIG[status] || STATUS_CONFIG['Open'];
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', handle);
+    return () => window.removeEventListener('mousedown', handle);
+  }, [open]);
+
   return (
-    <span
-      onClick={onClick}
-      style={{ display:'inline-flex', alignItems:'center', padding:'2px 8px', borderRadius:20, fontSize:12, fontWeight:500, background:c.bg, color:c.color, border:`1px solid ${c.border}`, cursor: onClick ? 'pointer' : 'default', whiteSpace:'nowrap' }}
-    >
-      {status || 'Open'}
+    <span ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
+      <span
+        onClick={() => setOpen(o => !o)}
+        style={{ display:'inline-flex', alignItems:'center', padding:'2px 8px', borderRadius:20, fontSize:12, fontWeight:500, background:c.bg, color:c.color, border:`1px solid ${c.border}`, cursor:'pointer', whiteSpace:'nowrap', gap: 4 }}
+      >
+        {status || 'Open'}
+        <ChevronDown size={10} />
+      </span>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-md)', zIndex:50, minWidth:130, padding:4 }}>
+          {STATUS_CYCLE.map(s => {
+            const sc = STATUS_CONFIG[s];
+            return (
+              <div
+                key={s}
+                onClick={() => { onSelect(s); setOpen(false); }}
+                style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:'var(--radius-sm)', cursor:'pointer', background: s === status ? 'var(--bg)' : 'transparent' }}
+                onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+                onMouseLeave={e => e.currentTarget.style.background = s === status ? 'var(--bg)' : 'transparent'}
+              >
+                <span style={{ display:'inline-flex', alignItems:'center', padding:'1px 8px', borderRadius:20, fontSize:12, fontWeight:500, background:sc.bg, color:sc.color, border:`1px solid ${sc.border}` }}>{s}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </span>
   );
 }
@@ -135,7 +166,7 @@ function TaskTable({ tasks, onStatusCycle, onEdit, onDelete, categories, showCat
               if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>;
               if (col.key === 'status') return (
                 <td key="status">
-                  <StatusBadge status={task.status} onClick={() => onStatusCycle(task)} />
+                  <StatusBadge status={task.status} onSelect={(s) => onStatusCycle(task, s)} />
                 </td>
               );
               if (col.key === 'dueDate') return (
@@ -253,10 +284,9 @@ export default function App() {
     });
   }, []);
 
-  const handleStatusCycle = useCallback(async (task) => {
-    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(task.status || 'Open') + 1) % STATUS_CYCLE.length];
+  const handleStatusCycle = useCallback(async (task, newStatus) => {
     const today = new Date().toISOString().split('T')[0];
-    const updated = { ...task, status: next, lastUpdate: today };
+    const updated = { ...task, status: newStatus, lastUpdate: today };
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     try { await updateTask(updated); }
     catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
