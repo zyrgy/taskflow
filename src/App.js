@@ -217,15 +217,19 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, o
                 <td key="dueDate" className={isOverdue(task.dueDate, task.status === 'Done') ? 'cell-overdue' : 'cell-secondary'}>
                   <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
                     {formatDate(task.dueDate)}
-                    <label style={{ cursor:'pointer', display:'inline-flex', alignItems:'center', color:'var(--text-tertiary)', position:'relative' }} title="Change due date">
-                      <CalendarDays size={13} />
+                    <span style={{ position:'relative', display:'inline-flex', alignItems:'center' }}>
+                      <CalendarDays
+                        size={13}
+                        style={{ cursor:'pointer', color:'var(--text-tertiary)' }}
+                        onClick={e => { const inp = e.currentTarget.nextSibling; try { inp.showPicker(); } catch { inp.click(); } }}
+                      />
                       <input
                         type="date"
                         value={task.dueDate || ''}
                         onChange={e => onDueDateChange(task, e.target.value)}
-                        style={{ position:'absolute', opacity:0, width:'100%', height:'100%', top:0, left:0, cursor:'pointer' }}
+                        style={{ position:'absolute', opacity:0, width:1, height:1, top:0, left:0, pointerEvents:'none' }}
                       />
-                    </label>
+                    </span>
                   </span>
                 </td>
               );
