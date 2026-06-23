@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, CheckCircle2, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns, CalendarDays } from 'lucide-react';
-import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, getSession, signOut, supabase } from './lib/supabase';
+import { fetchTasks, fetchCategories, fetchAllowedUsers, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, getSession, signOut, supabase } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
 import ImportModal from './components/ImportModal';
@@ -283,6 +283,7 @@ export default function App() {
   const [session, setSession] = useState(undefined); // undefined = loading, null = logged out
   const [tasks, setTasks] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [allowedUsers, setAllowedUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('All');
@@ -330,9 +331,10 @@ export default function App() {
       try {
         const { data } = await supabase.from('allowed_users').select('email').eq('email', session.user.email).single();
         if (!data) { setError('unauthorized'); setLoading(false); return; }
-        const [t, c] = await Promise.all([fetchTasks(), fetchCategories()]);
+        const [t, c, u] = await Promise.all([fetchTasks(), fetchCategories(), fetchAllowedUsers()]);
         setTasks(t);
         setCategories(c);
+        setAllowedUsers(u);
       } catch (e) { setError(e.message); }
       finally { setLoading(false); }
     }
@@ -654,7 +656,7 @@ export default function App() {
 
       {notesTask && <NotesModal task={notesTask} onSave={handleNotesSave} onClose={() => setNotesTask(null)} />}
       {showImport && <ImportModal categories={categories} onImport={handleImport} onClose={() => setShowImport(false)} />}
-      {modalTask && <TaskModal task={modalTask} categories={categories} onSave={handleSave} onClose={() => setModalTask(null)} />}
+      {modalTask && <TaskModal task={modalTask} categories={categories} allowedUsers={allowedUsers} onSave={handleSave} onClose={() => setModalTask(null)} />}
       {showCatManager && <CategoryManager categories={categories} onSave={handleSaveCategories} onClose={() => setShowCatManager(false)} />}
       {confirmDelete && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'1rem' }}
