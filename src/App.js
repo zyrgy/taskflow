@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut } from 'lucide-react';
+import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns } from 'lucide-react';
 import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, rowToTask, getSession, signOut, onAuthStateChange, supabase } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
@@ -38,20 +38,40 @@ function CategoryBadge({ categoryId, categories }) {
   );
 }
 
-function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory }) {
+const ALL_COLUMNS = [
+  { key: 'name',       label: 'Task',         sortable: true  },
+  { key: 'owner',      label: 'Owner',        sortable: true  },
+  { key: 'category',   label: 'Category',     sortable: true  },
+  { key: 'dueDate',    label: 'Due date',     sortable: true  },
+  { key: 'priority',   label: 'Priority',     sortable: true  },
+  { key: 'lastUpdate', label: 'Last updated', sortable: true  },
+  { key: 'notes',      label: 'Notes',        sortable: false },
+];
+
+function SortIcon({ col, sortKey, sortDir }) {
+  if (sortKey !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.3, marginLeft: 4 }} />;
+  return sortDir === 'asc'
+    ? <ChevronUp size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />
+    : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
+}
+
+function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols }) {
   if (tasks.length === 0) return null;
+  const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
   return (
     <table className="table">
       <thead>
         <tr>
           <th style={{ width: 44 }}></th>
-          <th>Task</th>
-          <th>Owner</th>
-          {showCategory && <th>Category</th>}
-          <th>Due date</th>
-          <th>Priority</th>
-          <th>Last updated</th>
-          <th>Notes</th>
+          {cols.map(col => (
+            <th key={col.key} onClick={col.sortable ? () => onSort(col.key) : undefined}
+              style={{ cursor: col.sortable ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+                {col.label}
+                {col.sortable && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}
+              </span>
+            </th>
+          ))}
           <th style={{ width: 80 }}></th>
         </tr>
       </thead>
@@ -63,20 +83,29 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
                 {task.done ? <CheckCircle2 size={18} color="var(--accent)" /> : <Circle size={18} color="var(--text-tertiary)" />}
               </button>
             </td>
-            <td><span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
-            <td className="cell-secondary">{task.owner || '—'}</td>
-            {showCategory && <td><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>}
-            <td className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
-              {formatDate(task.dueDate)}
-              {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
-            </td>
-            <td><PriorityBadge priority={task.priority} /></td>
-            <td className="cell-secondary">{formatDate(task.lastUpdate)}</td>
-            <td>
-              {task.notes
-                ? <span className="notes-tooltip-wrap"><span className="task-note-hint">Note</span><span className="notes-tooltip">{task.notes}</span></span>
-                : <span className="cell-secondary">—</span>}
-            </td>
+            {cols.map(col => {
+              if (col.key === 'name') return (
+                <td key="name"><span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
+              );
+              if (col.key === 'owner') return <td key="owner" className="cell-secondary">{task.owner || '—'}</td>;
+              if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>;
+              if (col.key === 'dueDate') return (
+                <td key="dueDate" className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
+                  {formatDate(task.dueDate)}
+                  {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
+                </td>
+              );
+              if (col.key === 'priority') return <td key="priority"><PriorityBadge priority={task.priority} /></td>;
+              if (col.key === 'lastUpdate') return <td key="lastUpdate" className="cell-secondary">{formatDate(task.lastUpdate)}</td>;
+              if (col.key === 'notes') return (
+                <td key="notes">
+                  {task.notes
+                    ? <span className="notes-tooltip-wrap"><span className="task-note-hint">Note</span><span className="notes-tooltip">{task.notes}</span></span>
+                    : <span className="cell-secondary">—</span>}
+                </td>
+              );
+              return null;
+            })}
             <td>
               <div className="row-actions">
                 <button className="action-btn" onClick={() => onEdit(task)} aria-label="Edit task"><Pencil size={14} /></button>
@@ -90,7 +119,7 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
   );
 }
 
-function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories }) {
+function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -102,7 +131,7 @@ function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories })
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} />
+          <TaskTable tasks={group.tasks} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} />
         </div>
       )}
     </div>
@@ -125,6 +154,10 @@ export default function App() {
   const [showImport, setShowImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sortKey, setSortKey] = useState('');
+  const [sortDir, setSortDir] = useState('asc');
+  const [visibleCols, setVisibleCols] = useState(['name','owner','category','dueDate','priority','lastUpdate','notes']);
+  const [showColPicker, setShowColPicker] = useState(false);
 
   useEffect(() => {
     // Get initial session
@@ -149,6 +182,13 @@ export default function App() {
     }
     load();
   }, [session]);
+
+  const handleSort = useCallback((key) => {
+    setSortKey(prev => {
+      if (prev === key) { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); return key; }
+      setSortDir('asc'); return key;
+    });
+  }, []);
 
   const openNew = () => setModalTask(newTaskTemplate());
   const openEdit = (task) => setModalTask({ ...task });
@@ -191,6 +231,7 @@ export default function App() {
   }, [categories]);
 
   const filtered = useMemo(() => {
+    const getCatName = (t) => categories.find(c => c.id === t.categoryId)?.name || '';
     return tasks
       .filter(t => {
         if (filter === 'To do' && t.done) return false;
@@ -204,10 +245,19 @@ export default function App() {
         return true;
       })
       .sort((a, b) => {
+        if (sortKey) {
+          let aVal, bVal;
+          if (sortKey === 'priority') { aVal = PRIORITIES_ORDER[a.priority] ?? 1; bVal = PRIORITIES_ORDER[b.priority] ?? 1; }
+          else if (sortKey === 'category') { aVal = getCatName(a).toLowerCase(); bVal = getCatName(b).toLowerCase(); }
+          else { aVal = (a[sortKey] || '').toString().toLowerCase(); bVal = (b[sortKey] || '').toString().toLowerCase(); }
+          if (aVal < bVal) return sortDir === 'asc' ? -1 : 1;
+          if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
+          return 0;
+        }
         if (a.done !== b.done) return a.done ? 1 : -1;
         return (PRIORITIES_ORDER[a.priority] ?? 1) - (PRIORITIES_ORDER[b.priority] ?? 1);
       });
-  }, [tasks, filter, search, priorityFilter, categoryFilter]);
+  }, [tasks, filter, search, priorityFilter, categoryFilter, sortKey, sortDir, categories]);
 
   const doneCount = tasks.filter(t => t.done).length;
   const totalCount = tasks.length;
@@ -308,6 +358,31 @@ export default function App() {
             <button className={`filter-toggle ${showFilters ? 'active' : ''}`} onClick={() => setShowFilters(s => !s)}>
               <SlidersHorizontal size={15} /> Filters
             </button>
+            <div style={{ position: 'relative' }}>
+              <button className={`filter-toggle ${showColPicker ? 'active' : ''}`} onClick={() => setShowColPicker(s => !s)}>
+                <Columns size={15} /> Columns
+              </button>
+              {showColPicker && (
+                <div className="col-picker">
+                  {ALL_COLUMNS.map(col => (
+                    <label key={col.key} className="col-picker-item">
+                      <input
+                        type="checkbox"
+                        checked={visibleCols.includes(col.key)}
+                        onChange={() => {
+                          setVisibleCols(prev =>
+                            prev.includes(col.key)
+                              ? prev.length > 1 ? prev.filter(k => k !== col.key) : prev
+                              : [...prev, col.key]
+                          );
+                        }}
+                      />
+                      {col.label}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
             <button className="btn-secondary" onClick={() => setShowImport(true)}>Import</button>
             <button className="btn-secondary" onClick={() => setShowCatManager(true)}>Categories</button>
             <button className="btn-primary" onClick={openNew}><Plus size={15} /> New task</button>
@@ -351,7 +426,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} />
+              <CollapsibleGroup key={id} id={id} group={group} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} />
             ))}
           </div>
         ) : (
@@ -363,7 +438,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} />
+              <TaskTable tasks={filtered} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} />
             )}
           </div>
         )}
