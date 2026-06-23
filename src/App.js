@@ -247,7 +247,7 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, o
             <td>
               <div className="row-actions">
                 <button className="action-btn" onClick={() => onEdit(task)} aria-label="Edit task"><Pencil size={14} /></button>
-                <button className="action-btn action-delete" onClick={() => onDelete(task.id)} aria-label="Delete task"><Trash2 size={14} /></button>
+                <button className="action-btn action-delete" onClick={() => onDelete(task.id, task.name)} aria-label="Delete task"><Trash2 size={14} /></button>
               </div>
             </td>
           </tr>
@@ -291,7 +291,7 @@ export default function App() {
   const [groupByCategory, setGroupByCategory] = useState(false);
   const [modalTask, setModalTask] = useState(null);
   const [showCatManager, setShowCatManager] = useState(false);
-  const [showImport, setShowImport] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null); // task to delete
   const [showFilters, setShowFilters] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sortKey, setSortKey] = useState('name');
@@ -391,11 +391,18 @@ export default function App() {
     finally { setSaving(false); }
   }, [tasks]);
 
-  const handleDelete = useCallback(async (id) => {
+  const handleDelete = useCallback((id, name) => {
+    setConfirmDelete({ id, name });
+  }, []);
+
+  const confirmAndDelete = useCallback(async () => {
+    if (!confirmDelete) return;
+    const { id } = confirmDelete;
     setTasks(prev => prev.filter(t => t.id !== id));
+    setConfirmDelete(null);
     try { await dbDeleteTask(id); }
     catch (e) { alert('Failed to delete: ' + e.message); }
-  }, []);
+  }, [confirmDelete]);
 
   const handleSaveCategories = useCallback(async (incoming) => {
     setSaving(true);
@@ -629,6 +636,23 @@ export default function App() {
       {showImport && <ImportModal categories={categories} onImport={handleImport} onClose={() => setShowImport(false)} />}
       {modalTask && <TaskModal task={modalTask} categories={categories} onSave={handleSave} onClose={() => setModalTask(null)} />}
       {showCatManager && <CategoryManager categories={categories} onSave={handleSaveCategories} onClose={() => setShowCatManager(false)} />}
+      {confirmDelete && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.35)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:'1rem' }}
+          onClick={e => { if (e.target === e.currentTarget) setConfirmDelete(null); }}>
+          <div style={{ background:'var(--surface)', borderRadius:'var(--radius-lg)', width:'100%', maxWidth:400, boxShadow:'var(--shadow-md)', overflow:'hidden' }}>
+            <div style={{ padding:'1.5rem' }}>
+              <h2 style={{ fontFamily:"'Inter Tight', sans-serif", fontSize:16, fontWeight:600, color:'var(--text-primary)', marginBottom:8 }}>Delete task</h2>
+              <p style={{ fontSize:14, color:'var(--text-secondary)' }}>
+                Are you sure you want to delete <strong>"{confirmDelete.name || 'this task'}"</strong>? This cannot be undone.
+              </p>
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:8, padding:'1rem 1.5rem', borderTop:'1px solid var(--border)' }}>
+              <button onClick={() => setConfirmDelete(null)} style={{ padding:'8px 16px', border:'1px solid var(--border)', borderRadius:'var(--radius-sm)', background:'none', color:'var(--text-secondary)', cursor:'pointer', fontSize:13 }}>Cancel</button>
+              <button onClick={confirmAndDelete} style={{ padding:'8px 20px', border:'none', borderRadius:'var(--radius-sm)', background:'#DC2626', color:'#fff', fontWeight:500, cursor:'pointer', fontSize:13 }}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
