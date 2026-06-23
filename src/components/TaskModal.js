@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X } from 'lucide-react';
 
 const PRIORITIES = ['high', 'medium', 'low'];
+const STATUSES = ['Open', 'In progress', 'Done', 'Stuck'];
 
 export default function TaskModal({ task, categories, onSave, onClose }) {
   const [form, setForm] = useState(task);
@@ -62,13 +63,17 @@ export default function TaskModal({ task, categories, onSave, onClose }) {
                 </select>
               </div>
               <div style={styles.field}>
-                <label style={styles.label}>Due date</label>
-                <input type="date" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+                <label style={styles.label}>Status</label>
+                <select value={form.status || 'Open'} onChange={e => set('status', e.target.value)}>
+                  {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
               </div>
             </div>
 
             <div style={styles.field}>
-              <label style={styles.label}>Notes</label>
+              <label style={styles.label}>Due date</label>
+              <input type="date" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
+            </div>
               <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any additional context…" />
             </div>
           </div>
