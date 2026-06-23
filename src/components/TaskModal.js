@@ -74,6 +74,9 @@ export default function TaskModal({ task, categories, onSave, onClose }) {
               <label style={styles.label}>Due date</label>
               <input type="date" value={form.dueDate} onChange={e => set('dueDate', e.target.value)} />
             </div>
+
+            <div style={styles.field}>
+              <label style={styles.label}>Notes</label>
               <textarea value={form.notes} onChange={e => set('notes', e.target.value)} placeholder="Any additional context…" />
             </div>
           </div>
