@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, CheckCircle2, Circle, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns } from 'lucide-react';
+import { Plus, Search, CheckCircle2, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns } from 'lucide-react';
 import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, getSession, signOut, supabase } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
@@ -8,7 +8,6 @@ import LoginPage from './components/LoginPage';
 import PriorityBadge from './components/PriorityBadge';
 import './App.css';
 
-const FILTERS = ['All', 'To do', 'Done'];
 const PRIORITIES_ORDER = { high: 0, medium: 1, low: 2 };
 
 function formatDate(str) {
@@ -24,7 +23,7 @@ function isOverdue(dueDate, done) {
 
 function newTaskTemplate() {
   const today = new Date().toISOString().split('T')[0];
-  return { id: crypto.randomUUID(), name: '', owner: '', dueDate: today, priority: 'medium', lastUpdate: today, notes: '', done: false, categoryId: '' };
+  return { id: crypto.randomUUID(), name: '', owner: '', dueDate: today, priority: 'medium', lastUpdate: today, notes: '', done: false, status: 'Open', categoryId: '' };
 }
 
 function CategoryBadge({ categoryId, categories }) {
@@ -42,13 +41,33 @@ const ALL_COLUMNS = [
   { key: 'name',       label: 'Task',         sortable: true  },
   { key: 'owner',      label: 'Owner',        sortable: true  },
   { key: 'category',   label: 'Category',     sortable: true  },
+  { key: 'status',     label: 'Status',       sortable: true  },
   { key: 'dueDate',    label: 'Due date',     sortable: true  },
   { key: 'priority',   label: 'Priority',     sortable: true  },
   { key: 'lastUpdate', label: 'Last updated', sortable: true  },
   { key: 'notes',      label: 'Notes',        sortable: false },
 ];
 
-const DEFAULT_COL_WIDTHS = { name: 220, owner: 130, category: 120, dueDate: 110, priority: 100, lastUpdate: 120, notes: 80 };
+const DEFAULT_COL_WIDTHS = { name: 220, owner: 130, category: 120, status: 110, dueDate: 110, priority: 100, lastUpdate: 120, notes: 80 };
+
+const STATUS_CONFIG = {
+  'Open':        { bg: '#F1F5F9', color: '#475569', border: '#CBD5E1' },
+  'In progress': { bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE' },
+  'Done':        { bg: '#F0FDF4', color: '#166534', border: '#BBF7D0' },
+  'Stuck':       { bg: '#FEF2F2', color: '#991B1B', border: '#FECACA' },
+};
+
+function StatusBadge({ status, onClick }) {
+  const c = STATUS_CONFIG[status] || STATUS_CONFIG['Open'];
+  return (
+    <span
+      onClick={onClick}
+      style={{ display:'inline-flex', alignItems:'center', padding:'2px 8px', borderRadius:20, fontSize:12, fontWeight:500, background:c.bg, color:c.color, border:`1px solid ${c.border}`, cursor: onClick ? 'pointer' : 'default', whiteSpace:'nowrap' }}
+    >
+      {status || 'Open'}
+    </span>
+  );
+}
 
 function SortIcon({ col, sortKey, sortDir }) {
   if (sortKey !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.3, marginLeft: 4 }} />;
@@ -57,7 +76,7 @@ function SortIcon({ col, sortKey, sortDir }) {
     : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
 }
 
-function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function TaskTable({ tasks, onStatusCycle, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   if (tasks.length === 0) return null;
   const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
 
@@ -86,7 +105,6 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
     <table className="table" style={{ tableLayout: 'fixed' }}>
       <thead>
         <tr>
-          <th style={{ width: 44 }}></th>
           {cols.map(col => (
             <th key={col.key}
               style={{ width: colWidths[col.key] || DEFAULT_COL_WIDTHS[col.key] || 120, position: 'relative', userSelect: 'none' }}
@@ -108,20 +126,20 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
       </thead>
       <tbody>
         {tasks.map(task => (
-          <tr key={task.id} className={`task-row ${task.done ? 'row-done' : ''}`}>
-            <td>
-              <button className="check-btn" onClick={() => onToggle(task)} aria-label={task.done ? 'Mark incomplete' : 'Mark complete'}>
-                {task.done ? <CheckCircle2 size={18} color="var(--accent)" /> : <Circle size={18} color="var(--text-tertiary)" />}
-              </button>
-            </td>
+          <tr key={task.id} className={`task-row ${task.status === 'Done' ? 'row-done' : ''}`}>
             {cols.map(col => {
               if (col.key === 'name') return (
-                <td key="name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
+                <td key="name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span className={`task-name ${task.status === 'Done' ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
               );
               if (col.key === 'owner') return <td key="owner" className="cell-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.owner || '—'}</td>;
               if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>;
+              if (col.key === 'status') return (
+                <td key="status">
+                  <StatusBadge status={task.status} onClick={() => onStatusCycle(task)} />
+                </td>
+              );
               if (col.key === 'dueDate') return (
-                <td key="dueDate" className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
+                <td key="dueDate" className={isOverdue(task.dueDate, task.status === 'Done') ? 'cell-overdue' : 'cell-secondary'}>
                   {formatDate(task.dueDate)}
                 </td>
               );
@@ -149,7 +167,7 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
   );
 }
 
-function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function CollapsibleGroup({ id, group, onStatusCycle, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -161,7 +179,7 @@ function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories, s
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
+          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
         </div>
       )}
     </div>
@@ -186,7 +204,7 @@ export default function App() {
   const [saving, setSaving] = useState(false);
   const [sortKey, setSortKey] = useState('name');
   const [sortDir, setSortDir] = useState('asc');
-  const [visibleCols, setVisibleCols] = useState(['name','owner','category','dueDate','priority','lastUpdate','notes']);
+  const [visibleCols, setVisibleCols] = useState(['name','owner','category','status','dueDate','priority','lastUpdate','notes']);
   const [showColPicker, setShowColPicker] = useState(false);
   const [colWidths, setColWidths] = useState({});
 
@@ -233,6 +251,16 @@ export default function App() {
     });
   }, []);
 
+  const STATUS_CYCLE = ['Open', 'In progress', 'Done', 'Stuck'];
+  const handleStatusCycle = useCallback(async (task) => {
+    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(task.status || 'Open') + 1) % STATUS_CYCLE.length];
+    const today = new Date().toISOString().split('T')[0];
+    const updated = { ...task, status: next, lastUpdate: today };
+    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+    try { await updateTask(updated); }
+    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
+  }, []);
+
   const openNew = () => setModalTask(newTaskTemplate());
   const openEdit = (task) => setModalTask({ ...task });
 
@@ -248,14 +276,6 @@ export default function App() {
     } catch (e) { alert('Failed to save: ' + e.message); }
     finally { setSaving(false); }
   }, [tasks]);
-
-  const handleToggle = useCallback(async (task) => {
-    const today = new Date().toISOString().split('T')[0];
-    const updated = { ...task, done: !task.done, lastUpdate: today };
-    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
-    try { await updateTask(updated); }
-    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
-  }, []);
 
   const handleDelete = useCallback(async (id) => {
     setTasks(prev => prev.filter(t => t.id !== id));
@@ -279,8 +299,10 @@ export default function App() {
     const getCatName = (t) => categories.find(c => c.id === t.categoryId)?.name || '';
     return tasks
       .filter(t => {
-        if (filter === 'To do' && t.done) return false;
-        if (filter === 'Done' && !t.done) return false;
+        if (filter === 'To do' && t.status !== 'Open') return false;
+        if (filter === 'Done' && t.status !== 'Done') return false;
+        if (filter === 'In progress' && t.status !== 'In progress') return false;
+        if (filter === 'Stuck' && t.status !== 'Stuck') return false;
         if (priorityFilter !== 'all' && t.priority !== priorityFilter) return false;
         if (categoryFilter !== 'all' && t.categoryId !== categoryFilter) return false;
         if (search) {
@@ -299,12 +321,11 @@ export default function App() {
           if (aVal > bVal) return sortDir === 'asc' ? 1 : -1;
           return 0;
         }
-        if (a.done !== b.done) return a.done ? 1 : -1;
         return (PRIORITIES_ORDER[a.priority] ?? 1) - (PRIORITIES_ORDER[b.priority] ?? 1);
       });
   }, [tasks, filter, search, priorityFilter, categoryFilter, sortKey, sortDir, categories]);
 
-  const doneCount = tasks.filter(t => t.done).length;
+  const doneCount = tasks.filter(t => t.status === 'Done').length;
   const totalCount = tasks.length;
 
   const groups = useMemo(() => {
@@ -438,7 +459,9 @@ export default function App() {
           <div className="filter-bar">
             <div className="filter-group">
               <span className="filter-label">Status</span>
-              {FILTERS.map(f => <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>{f}</button>)}
+              {['All', 'Open', 'In progress', 'Done', 'Stuck'].map(f => (
+                <button key={f} className={`chip ${filter === f ? 'chip-active' : ''}`} onClick={() => setFilter(f)}>{f}</button>
+              ))}
             </div>
             <div className="filter-group">
               <span className="filter-label">Priority</span>
@@ -471,7 +494,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             ))}
           </div>
         ) : (
@@ -483,7 +506,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             )}
           </div>
         )}
