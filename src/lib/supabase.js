@@ -71,10 +71,10 @@ export async function createTask(task) {
 export async function updateTask(task) {
   const row = taskToRow(task);
   delete row.id;
-  console.log('Updating task', task.id, row);
+  console.log('updateTask sending:', JSON.stringify(row));
   const { data, error } = await supabase.from('tasks').update(row).eq('id', task.id).select().single();
   if (error) { console.error('Update error', error); throw new Error(error.message); }
-  console.log('Update result', data);
+  console.log('updateTask DB response:', JSON.stringify(data));
   return rowToTask(data);
 }
 
