@@ -107,7 +107,7 @@ function SortIcon({ col, sortKey, sortDir }) {
     : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
 }
 
-function TaskTable({ tasks, onStatusCycle, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function TaskTable({ tasks, onStatusCycle, onPriorityChange, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   if (tasks.length === 0) return null;
   const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
 
@@ -174,7 +174,7 @@ function TaskTable({ tasks, onStatusCycle, onEdit, onDelete, categories, showCat
                   {formatDate(task.dueDate)}
                 </td>
               );
-              if (col.key === 'priority') return <td key="priority"><PriorityBadge priority={task.priority} /></td>;
+              if (col.key === 'priority') return <td key="priority"><PriorityBadge priority={task.priority} onSelect={(p) => onPriorityChange(task, p)} /></td>;
               if (col.key === 'lastUpdate') return <td key="lastUpdate" className="cell-secondary">{formatDate(task.lastUpdate)}</td>;
               if (col.key === 'notes') return (
                 <td key="notes">
@@ -198,7 +198,7 @@ function TaskTable({ tasks, onStatusCycle, onEdit, onDelete, categories, showCat
   );
 }
 
-function CollapsibleGroup({ id, group, onStatusCycle, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -210,7 +210,7 @@ function CollapsibleGroup({ id, group, onStatusCycle, onEdit, onDelete, categori
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
+          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
         </div>
       )}
     </div>
@@ -287,6 +287,14 @@ export default function App() {
   const handleStatusCycle = useCallback(async (task, newStatus) => {
     const today = new Date().toISOString().split('T')[0];
     const updated = { ...task, status: newStatus, lastUpdate: today };
+    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+    try { await updateTask(updated); }
+    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
+  }, []);
+
+  const handlePriorityChange = useCallback(async (task, newPriority) => {
+    const today = new Date().toISOString().split('T')[0];
+    const updated = { ...task, priority: newPriority, lastUpdate: today };
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     try { await updateTask(updated); }
     catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
@@ -525,7 +533,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             ))}
           </div>
         ) : (
@@ -537,7 +545,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             )}
           </div>
         )}
