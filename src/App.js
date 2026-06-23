@@ -195,10 +195,15 @@ export default function App() {
     setColWidths(prev => ({ ...prev, [key]: width }));
   }, []);
 
+  const dataLoaded = React.useRef(false);
+
   useEffect(() => {
     getSession().then(s => setSession(s || null));
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+      if (event === 'SIGNED_OUT') {
+        setSession(null);
+        dataLoaded.current = false;
+      } else if (event === 'SIGNED_IN' && !dataLoaded.current) {
         setSession(s || null);
       }
     });
@@ -206,7 +211,8 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!session) return;
+    if (!session || dataLoaded.current) return;
+    dataLoaded.current = true;
     setLoading(true);
     async function load() {
       try {
