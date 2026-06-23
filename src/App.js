@@ -123,7 +123,6 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
               if (col.key === 'dueDate') return (
                 <td key="dueDate" className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
                   {formatDate(task.dueDate)}
-                  {isOverdue(task.dueDate, task.done) && <span className="overdue-tag">Overdue</span>}
                 </td>
               );
               if (col.key === 'priority') return <td key="priority"><PriorityBadge priority={task.priority} /></td>;
