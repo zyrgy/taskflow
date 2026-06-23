@@ -59,6 +59,7 @@ export async function replaceCategories(incoming, existing) {
 export async function fetchTasks() {
   const { data, error } = await supabase.from('tasks').select('*').order('created_at');
   if (error) throw new Error(error.message);
+  console.log('fetchTasks raw:', JSON.stringify(data[0]));
   return data.map(rowToTask);
 }
 
