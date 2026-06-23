@@ -394,8 +394,8 @@ export default function App() {
       <main className="main">
         <div className="toolbar">
           <div className="search-wrap">
-            <Search size={15} className="search-icon" />
-            <input className="search-input" type="text" placeholder="Search tasks or owners…" value={search} onChange={e => setSearch(e.target.value)} />
+            <Search size={15} className="search-icon" style={{ left: 12 }} />
+            <input className="search-input" type="text" placeholder="Search tasks or owners…" value={search} onChange={e => setSearch(e.target.value)} style={{ paddingLeft: 40 }} />
           </div>
           <div className="toolbar-right">
             <button className={`filter-toggle ${groupByCategory ? 'active' : ''}`} onClick={() => setGroupByCategory(g => !g)}>
