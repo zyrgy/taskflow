@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, Search, CheckCircle2, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns, CalendarDays } from 'lucide-react';
-import { fetchTasks, fetchCategories, fetchAllowedUsers, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, getSession, signOut, supabase } from './lib/supabase';
+import { fetchTasks, fetchCategories, fetchAllowedUsers, upsertUserName, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, getSession, signOut, supabase } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
 import ImportModal from './components/ImportModal';
@@ -145,14 +145,57 @@ function StatusBadge({ status, onSelect }) {
   );
 }
 
-function SortIcon({ col, sortKey, sortDir }) {
+function OwnerBadge({ owner, allowedUsers, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef();
+  const user = allowedUsers.find(u => u.email === owner);
+  const displayName = user?.name || user?.email || owner;
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', handle);
+    return () => window.removeEventListener('mousedown', handle);
+  }, [open]);
+
+  return (
+    <span ref={ref} style={{ position:'relative', display:'inline-block' }}>
+      <span onClick={() => setOpen(o => !o)} style={{ display:'inline-flex', alignItems:'center', gap:4, fontSize:13, color: owner ? 'var(--text-primary)' : 'var(--text-tertiary)', cursor:'pointer', whiteSpace:'nowrap' }}>
+        {displayName || '—'}
+        <ChevronDown size={10} style={{ color:'var(--text-tertiary)', flexShrink:0 }} />
+      </span>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-md)', zIndex:50, minWidth:160, padding:4 }}>
+          <div
+            onClick={() => { onSelect(''); setOpen(false); }}
+            style={{ padding:'6px 10px', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:13, color:'var(--text-tertiary)', background: !owner ? 'var(--bg)' : 'transparent' }}
+            onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+            onMouseLeave={e => e.currentTarget.style.background = !owner ? 'var(--bg)' : 'transparent'}
+          >No owner</div>
+          {allowedUsers.map(u => (
+            <div key={u.email}
+              onClick={() => { onSelect(u.email); setOpen(false); }}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:13, color:'var(--text-primary)', background: u.email === owner ? 'var(--bg)' : 'transparent' }}
+              onMouseEnter={e => e.currentTarget.style.background='var(--bg)'}
+              onMouseLeave={e => e.currentTarget.style.background = u.email === owner ? 'var(--bg)' : 'transparent'}
+            >
+              {u.name || u.email}
+            </div>
+          ))}
+        </div>
+      )}
+    </span>
+  );
+}
+
+
   if (sortKey !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.3, marginLeft: 4 }} />;
   return sortDir === 'asc'
     ? <ChevronUp size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />
     : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
 }
 
-function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, onDueDateChange, onNotesEdit, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, onDueDateChange, onOwnerChange, onNotesEdit, onEdit, onDelete, allowedUsers, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   if (tasks.length === 0) return null;
   const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
 
@@ -207,7 +250,11 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, o
               if (col.key === 'name') return (
                 <td key="name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span className={`task-name ${task.status === 'Done' ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
               );
-              if (col.key === 'owner') return <td key="owner" className="cell-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.owner || '—'}</td>;
+              if (col.key === 'owner') return (
+                <td key="owner">
+                  <OwnerBadge owner={task.owner} allowedUsers={allowedUsers} onSelect={(o) => onOwnerChange(task, o)} />
+                </td>
+              );
               if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} onSelect={(id) => onCategoryChange(task, id)} /></td>;
               if (col.key === 'status') return (
                 <td key="status">
@@ -258,7 +305,7 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, o
   );
 }
 
-function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCategoryChange, onDueDateChange, onNotesEdit, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCategoryChange, onDueDateChange, onOwnerChange, onNotesEdit, onEdit, onDelete, allowedUsers, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -270,7 +317,7 @@ function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCatego
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onCategoryChange={onCategoryChange} onDueDateChange={onDueDateChange} onNotesEdit={onNotesEdit} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
+          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onCategoryChange={onCategoryChange} onDueDateChange={onDueDateChange} onOwnerChange={onOwnerChange} onNotesEdit={onNotesEdit} onEdit={onEdit} onDelete={onDelete} allowedUsers={allowedUsers} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
         </div>
       )}
     </div>
@@ -331,6 +378,9 @@ export default function App() {
       try {
         const { data } = await supabase.from('allowed_users').select('email').eq('email', session.user.email).single();
         if (!data) { setError('unauthorized'); setLoading(false); return; }
+        // Save Google name to allowed_users
+        const googleName = session.user.user_metadata?.full_name;
+        if (googleName) upsertUserName(session.user.email, googleName);
         const [t, c, u] = await Promise.all([fetchTasks(), fetchCategories(), fetchAllowedUsers()]);
         setTasks(t);
         setCategories(c);
@@ -387,6 +437,14 @@ export default function App() {
     const updated = { ...task, notes, lastUpdate: today };
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     setNotesTask(null);
+    try { await updateTask(updated); }
+    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
+  }, []);
+
+  const handleOwnerChange = useCallback(async (task, newOwner) => {
+    const today = new Date().toISOString().split('T')[0];
+    const updated = { ...task, owner: newOwner, lastUpdate: today };
+    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     try { await updateTask(updated); }
     catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
   }, []);
@@ -636,7 +694,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onDueDateChange={handleDueDateChange} onNotesEdit={handleNotesEdit} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onDueDateChange={handleDueDateChange} onOwnerChange={handleOwnerChange} onNotesEdit={handleNotesEdit} onEdit={openEdit} onDelete={handleDelete} allowedUsers={allowedUsers} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             ))}
           </div>
         ) : (
@@ -648,7 +706,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onDueDateChange={handleDueDateChange} onNotesEdit={handleNotesEdit} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onDueDateChange={handleDueDateChange} onOwnerChange={handleOwnerChange} onNotesEdit={handleNotesEdit} onEdit={openEdit} onDelete={handleDelete} allowedUsers={allowedUsers} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             )}
           </div>
         )}
