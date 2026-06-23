@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Plus, Search, CheckCircle2, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns } from 'lucide-react';
+import { Plus, Search, CheckCircle2, Trash2, Pencil, SlidersHorizontal, Tag, ChevronDown, ChevronRight, Loader, LogOut, ChevronsUpDown, ChevronUp, Columns, CalendarDays } from 'lucide-react';
 import { fetchTasks, fetchCategories, createTask, updateTask, deleteTask as dbDeleteTask, replaceCategories, getSession, signOut, supabase } from './lib/supabase';
 import TaskModal from './components/TaskModal';
 import CategoryManager from './components/CategoryManager';
@@ -151,7 +151,7 @@ function SortIcon({ col, sortKey, sortDir }) {
     : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
 }
 
-function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, onDueDateChange, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   if (tasks.length === 0) return null;
   const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
 
@@ -215,7 +215,18 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, o
               );
               if (col.key === 'dueDate') return (
                 <td key="dueDate" className={isOverdue(task.dueDate, task.status === 'Done') ? 'cell-overdue' : 'cell-secondary'}>
-                  {formatDate(task.dueDate)}
+                  <span style={{ display:'inline-flex', alignItems:'center', gap:6 }}>
+                    {formatDate(task.dueDate)}
+                    <label style={{ cursor:'pointer', display:'inline-flex', alignItems:'center', color:'var(--text-tertiary)', position:'relative' }} title="Change due date">
+                      <CalendarDays size={13} />
+                      <input
+                        type="date"
+                        value={task.dueDate || ''}
+                        onChange={e => onDueDateChange(task, e.target.value)}
+                        style={{ position:'absolute', opacity:0, width:'100%', height:'100%', top:0, left:0, cursor:'pointer' }}
+                      />
+                    </label>
+                  </span>
                 </td>
               );
               if (col.key === 'priority') return <td key="priority"><PriorityBadge priority={task.priority} onSelect={(p) => onPriorityChange(task, p)} /></td>;
@@ -242,7 +253,7 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, o
   );
 }
 
-function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCategoryChange, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCategoryChange, onDueDateChange, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -254,7 +265,7 @@ function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCatego
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onCategoryChange={onCategoryChange} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
+          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onCategoryChange={onCategoryChange} onDueDateChange={onDueDateChange} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
         </div>
       )}
     </div>
@@ -347,6 +358,14 @@ export default function App() {
   const handleCategoryChange = useCallback(async (task, newCategoryId) => {
     const today = new Date().toISOString().split('T')[0];
     const updated = { ...task, categoryId: newCategoryId, lastUpdate: today };
+    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+    try { await updateTask(updated); }
+    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
+  }, []);
+
+  const handleDueDateChange = useCallback(async (task, newDate) => {
+    const today = new Date().toISOString().split('T')[0];
+    const updated = { ...task, dueDate: newDate, lastUpdate: today };
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     try { await updateTask(updated); }
     catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
@@ -585,7 +604,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onDueDateChange={handleDueDateChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             ))}
           </div>
         ) : (
@@ -597,7 +616,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onDueDateChange={handleDueDateChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             )}
           </div>
         )}
