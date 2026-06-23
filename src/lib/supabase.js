@@ -26,9 +26,13 @@ export function onAuthStateChange(callback) {
 }
 
 export async function fetchAllowedUsers() {
-  const { data, error } = await supabase.from('allowed_users').select('email');
+  const { data, error } = await supabase.from('allowed_users').select('email, name');
   if (error) throw new Error(error.message);
-  return data.map(r => r.email);
+  return data;
+}
+
+export async function upsertUserName(email, name) {
+  await supabase.from('allowed_users').update({ name }).eq('email', email);
 }
 
 export async function fetchCategories() {
