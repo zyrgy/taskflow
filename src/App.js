@@ -540,7 +540,12 @@ export default function App() {
               <div className="progress-fill" style={{ width: totalCount ? `${(doneCount / totalCount) * 100}%` : '0%' }} />
             </div>
             <button onClick={handleSignOut} style={{ border: 'none', background: 'none', color: 'var(--text-tertiary)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5, fontSize: 13, marginLeft: 8 }} title="Sign out">
-              <LogOut size={15} /> Sign out
+              {session?.user?.user_metadata?.avatar_url
+                ? <img src={session.user.user_metadata.avatar_url} alt="" style={{ width:24, height:24, borderRadius:'50%', objectFit:'cover' }} />
+                : <LogOut size={15} />
+              }
+              <span>{session?.user?.user_metadata?.full_name || session?.user?.email}</span>
+              <LogOut size={13} />
             </button>
           </div>
         </div>
