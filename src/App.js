@@ -375,8 +375,8 @@ export default function App() {
       <header className="header">
         <div className="header-inner">
           <div className="brand">
-            <span className="brand-mark">TF</span>
-            <h1 className="brand-name">TaskFlow</h1>
+            <img src="/logo.png" alt="Ladies Tasks" style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+            <h1 className="brand-name">Ladies Tasks</h1>
           </div>
           <div className="header-meta">
             {saving && <Loader size={14} className="spin" style={{ color: 'var(--text-tertiary)' }} />}
