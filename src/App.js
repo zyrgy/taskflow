@@ -188,7 +188,7 @@ function OwnerBadge({ owner, allowedUsers, onSelect }) {
   );
 }
 
-
+function SortIcon({ col, sortKey, sortDir }) {
   if (sortKey !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.3, marginLeft: 4 }} />;
   return sortDir === 'asc'
     ? <ChevronUp size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />
