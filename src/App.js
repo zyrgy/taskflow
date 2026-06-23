@@ -232,8 +232,10 @@ export default function App() {
   const handleSave = useCallback(async (saved) => {
     setSaving(true);
     try {
+      const today = new Date().toISOString().split('T')[0];
+      const taskToSave = { ...saved, lastUpdate: today };
       const isNew = !tasks.find(t => t.id === saved.id);
-      const result = isNew ? await createTask(saved) : await updateTask(saved);
+      const result = isNew ? await createTask(taskToSave) : await updateTask(taskToSave);
       setTasks(prev => isNew ? [result, ...prev] : prev.map(t => t.id === result.id ? result : t));
       setModalTask(null);
     } catch (e) { alert('Failed to save: ' + e.message); }
