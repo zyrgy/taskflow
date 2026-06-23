@@ -26,13 +26,57 @@ function newTaskTemplate() {
   return { id: crypto.randomUUID(), name: '', owner: '', dueDate: today, priority: 'medium', lastUpdate: today, notes: '', done: false, status: 'Open', categoryId: '' };
 }
 
-function CategoryBadge({ categoryId, categories }) {
+function CategoryBadge({ categoryId, categories, onSelect }) {
+  const [open, setOpen] = useState(false);
+  const ref = React.useRef();
   const cat = categories.find(c => c.id === categoryId);
-  if (!cat) return <span className="cell-secondary">—</span>;
+
+  useEffect(() => {
+    if (!open) return;
+    const handle = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    window.addEventListener('mousedown', handle);
+    return () => window.removeEventListener('mousedown', handle);
+  }, [open]);
+
+  const badge = cat
+    ? <span className="cat-badge" style={{ background: cat.color + '18', color: cat.color, border: `1px solid ${cat.color}40`, display:'inline-flex', alignItems:'center', gap:4 }}>
+        <span style={{ width:6, height:6, borderRadius:'50%', background:cat.color, display:'inline-block', flexShrink:0 }} />
+        {cat.name}
+        {onSelect && <ChevronDown size={10} />}
+      </span>
+    : <span className="cell-secondary" style={{ display:'inline-flex', alignItems:'center', gap:4, cursor: onSelect ? 'pointer' : 'default' }}>
+        —{onSelect && <ChevronDown size={10} />}
+      </span>;
+
+  if (!onSelect) return badge;
+
   return (
-    <span className="cat-badge" style={{ background: cat.color + '18', color: cat.color, border: `1px solid ${cat.color}40` }}>
-      <span style={{ width: 6, height: 6, borderRadius: '50%', background: cat.color, display: 'inline-block', marginRight: 5, flexShrink: 0 }} />
-      {cat.name}
+    <span ref={ref} style={{ position:'relative', display:'inline-block' }}>
+      <span onClick={() => setOpen(o => !o)} style={{ cursor:'pointer' }}>{badge}</span>
+      {open && (
+        <div style={{ position:'absolute', top:'calc(100% + 4px)', left:0, background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-md)', boxShadow:'var(--shadow-md)', zIndex:50, minWidth:150, padding:4 }}>
+          <div
+            onClick={() => { onSelect(''); setOpen(false); }}
+            style={{ padding:'6px 10px', borderRadius:'var(--radius-sm)', cursor:'pointer', fontSize:13, color:'var(--text-tertiary)', background: !categoryId ? 'var(--bg)' : 'transparent' }}
+            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+            onMouseLeave={e => e.currentTarget.style.background = !categoryId ? 'var(--bg)' : 'transparent'}
+          >
+            No category
+          </div>
+          {categories.map(c => (
+            <div
+              key={c.id}
+              onClick={() => { onSelect(c.id); setOpen(false); }}
+              style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:'var(--radius-sm)', cursor:'pointer', background: c.id === categoryId ? 'var(--bg)' : 'transparent' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg)'}
+              onMouseLeave={e => e.currentTarget.style.background = c.id === categoryId ? 'var(--bg)' : 'transparent'}
+            >
+              <span style={{ width:10, height:10, borderRadius:'50%', background:c.color, flexShrink:0 }} />
+              <span style={{ fontSize:13, color:'var(--text-primary)' }}>{c.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
     </span>
   );
 }
@@ -107,7 +151,7 @@ function SortIcon({ col, sortKey, sortDir }) {
     : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
 }
 
-function TaskTable({ tasks, onStatusCycle, onPriorityChange, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function TaskTable({ tasks, onStatusCycle, onPriorityChange, onCategoryChange, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   if (tasks.length === 0) return null;
   const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
 
@@ -163,7 +207,7 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onEdit, onDelete, c
                 <td key="name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span className={`task-name ${task.status === 'Done' ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
               );
               if (col.key === 'owner') return <td key="owner" className="cell-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.owner || '—'}</td>;
-              if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>;
+              if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} onSelect={(id) => onCategoryChange(task, id)} /></td>;
               if (col.key === 'status') return (
                 <td key="status">
                   <StatusBadge status={task.status} onSelect={(s) => onStatusCycle(task, s)} />
@@ -198,7 +242,7 @@ function TaskTable({ tasks, onStatusCycle, onPriorityChange, onEdit, onDelete, c
   );
 }
 
-function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
+function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onCategoryChange, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -210,7 +254,7 @@ function CollapsibleGroup({ id, group, onStatusCycle, onPriorityChange, onEdit, 
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
+          <TaskTable tasks={group.tasks} onStatusCycle={onStatusCycle} onPriorityChange={onPriorityChange} onCategoryChange={onCategoryChange} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
         </div>
       )}
     </div>
@@ -295,6 +339,14 @@ export default function App() {
   const handlePriorityChange = useCallback(async (task, newPriority) => {
     const today = new Date().toISOString().split('T')[0];
     const updated = { ...task, priority: newPriority, lastUpdate: today };
+    setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
+    try { await updateTask(updated); }
+    catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
+  }, []);
+
+  const handleCategoryChange = useCallback(async (task, newCategoryId) => {
+    const today = new Date().toISOString().split('T')[0];
+    const updated = { ...task, categoryId: newCategoryId, lastUpdate: today };
     setTasks(prev => prev.map(t => t.id === task.id ? updated : t));
     try { await updateTask(updated); }
     catch (e) { setTasks(prev => prev.map(t => t.id === task.id ? task : t)); }
@@ -533,7 +585,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <CollapsibleGroup key={id} id={id} group={group} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             ))}
           </div>
         ) : (
@@ -545,7 +597,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
+              <TaskTable tasks={filtered} onStatusCycle={handleStatusCycle} onPriorityChange={handlePriorityChange} onCategoryChange={handleCategoryChange} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             )}
           </div>
         )}
