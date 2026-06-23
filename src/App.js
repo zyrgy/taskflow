@@ -292,6 +292,7 @@ export default function App() {
   const [modalTask, setModalTask] = useState(null);
   const [showCatManager, setShowCatManager] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(null); // task to delete
+  const [showImport, setShowImport] = useState(false);
   const [showFilters, setShowFilters] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sortKey, setSortKey] = useState('name');
