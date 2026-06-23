@@ -88,6 +88,7 @@ function taskToRow(task) {
     last_update: task.lastUpdate || null,
     notes: task.notes || '',
     done: task.done || false,
+    status: task.status || 'Open',
     category_id: task.categoryId || null,
   };
 }
@@ -102,6 +103,7 @@ export function rowToTask(row) {
     lastUpdate: row.last_update || '',
     notes: row.notes || '',
     done: row.done || false,
+    status: row.status || 'Open',
     categoryId: row.category_id || '',
     createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
