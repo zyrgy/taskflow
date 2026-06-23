@@ -5,7 +5,6 @@ const SUPABASE_ANON_KEY = process.env.REACT_APP_SUPABASE_ANON_KEY;
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Auth
 export async function signInWithGoogle() {
   await supabase.auth.signInWithOAuth({
     provider: 'google',
@@ -26,7 +25,6 @@ export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange((_event, session) => callback(session));
 }
 
-// Categories
 export async function fetchCategories() {
   const { data, error } = await supabase.from('categories').select('*').order('created_at');
   if (error) throw new Error(error.message);
@@ -55,13 +53,10 @@ export async function replaceCategories(incoming, existing) {
   ];
 }
 
-// Tasks
 export async function fetchTasks() {
   const { data, error } = await supabase.from('tasks').select('*').order('created_at');
   if (error) throw new Error(error.message);
-  const mapped = data.map(rowToTask);
-  console.log('fetchTasks mapped:', JSON.stringify(mapped.map(t => ({ id: t.id, name: t.name, dueDate: t.dueDate, categoryId: t.categoryId }))));
-  return mapped;
+  return data.map(rowToTask);
 }
 
 export async function createTask(task) {
@@ -73,10 +68,8 @@ export async function createTask(task) {
 export async function updateTask(task) {
   const row = taskToRow(task);
   delete row.id;
-  console.log('updateTask sending:', JSON.stringify(row));
   const { data, error } = await supabase.from('tasks').update(row).eq('id', task.id).select().single();
-  if (error) { console.error('Update error', error); throw new Error(error.message); }
-  console.log('updateTask DB response:', JSON.stringify(data));
+  if (error) throw new Error(error.message);
   return rowToTask(data);
 }
 
@@ -88,13 +81,13 @@ export async function deleteTask(id) {
 function taskToRow(task) {
   return {
     id: task.id,
-    name: task.name,
-    owner: task.owner,
+    name: task.name || '',
+    owner: task.owner || '',
     due_date: task.dueDate || null,
-    priority: task.priority,
+    priority: task.priority || 'medium',
     last_update: task.lastUpdate || null,
-    notes: task.notes,
-    done: task.done,
+    notes: task.notes || '',
+    done: task.done || false,
     category_id: task.categoryId || null,
   };
 }
@@ -102,14 +95,14 @@ function taskToRow(task) {
 export function rowToTask(row) {
   return {
     id: row.id,
-    name: row.name,
+    name: row.name || '',
     owner: row.owner || '',
     dueDate: row.due_date || '',
-    priority: row.priority,
+    priority: row.priority || 'medium',
     lastUpdate: row.last_update || '',
     notes: row.notes || '',
-    done: row.done,
+    done: row.done || false,
     categoryId: row.category_id || '',
-    createdAt: new Date(row.created_at).getTime(),
+    createdAt: row.created_at ? new Date(row.created_at).getTime() : Date.now(),
   };
 }
