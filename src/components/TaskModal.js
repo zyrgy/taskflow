@@ -47,7 +47,7 @@ export default function TaskModal({ task, categories, allowedUsers, onSave, onCl
                 {allowedUsers && allowedUsers.length > 0
                   ? <select value={form.owner} onChange={e => set('owner', e.target.value)}>
                       <option value="">No owner</option>
-                      {allowedUsers.map(email => <option key={email} value={email}>{email}</option>)}
+                      {allowedUsers.map(u => <option key={u.email} value={u.email}>{u.name || u.email}</option>)}
                     </select>
                   : <input type="text" value={form.owner} onChange={e => set('owner', e.target.value)} placeholder="Assign to…" />
                 }
