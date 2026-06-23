@@ -48,6 +48,8 @@ const ALL_COLUMNS = [
   { key: 'notes',      label: 'Notes',        sortable: false },
 ];
 
+const DEFAULT_COL_WIDTHS = { name: 220, owner: 130, category: 120, dueDate: 110, priority: 100, lastUpdate: 120, notes: 80 };
+
 function SortIcon({ col, sortKey, sortDir }) {
   if (sortKey !== col) return <ChevronsUpDown size={12} style={{ opacity: 0.3, marginLeft: 4 }} />;
   return sortDir === 'asc'
@@ -55,21 +57,50 @@ function SortIcon({ col, sortKey, sortDir }) {
     : <ChevronDown size={12} style={{ marginLeft: 4, color: 'var(--accent)' }} />;
 }
 
-function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols }) {
+function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   if (tasks.length === 0) return null;
   const cols = ALL_COLUMNS.filter(c => c.key !== 'category' || showCategory).filter(c => visibleCols.includes(c.key));
+
+  const startResize = (e, colKey) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    const startWidth = colWidths[colKey] || DEFAULT_COL_WIDTHS[colKey] || 120;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const onMove = (me) => {
+      const newWidth = Math.max(60, startWidth + me.clientX - startX);
+      onColResize(colKey, newWidth);
+    };
+    const onUp = () => {
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
   return (
-    <table className="table">
+    <table className="table" style={{ tableLayout: 'fixed' }}>
       <thead>
         <tr>
           <th style={{ width: 44 }}></th>
           {cols.map(col => (
-            <th key={col.key} onClick={col.sortable ? () => onSort(col.key) : undefined}
-              style={{ cursor: col.sortable ? 'pointer' : 'default', userSelect: 'none', whiteSpace: 'nowrap' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <th key={col.key}
+              style={{ width: colWidths[col.key] || DEFAULT_COL_WIDTHS[col.key] || 120, position: 'relative', userSelect: 'none' }}
+              onClick={col.sortable ? () => onSort(col.key) : undefined}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', cursor: col.sortable ? 'pointer' : 'default' }}>
                 {col.label}
                 {col.sortable && <SortIcon col={col.key} sortKey={sortKey} sortDir={sortDir} />}
               </span>
+              <span
+                className="col-resize-handle"
+                onMouseDown={e => startResize(e, col.key)}
+                onClick={e => e.stopPropagation()}
+                title="Drag to resize"
+              />
             </th>
           ))}
           <th style={{ width: 80 }}></th>
@@ -85,9 +116,9 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
             </td>
             {cols.map(col => {
               if (col.key === 'name') return (
-                <td key="name"><span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
+                <td key="name" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}><span className={`task-name ${task.done ? 'task-name-done' : ''}`}>{task.name || '—'}</span></td>
               );
-              if (col.key === 'owner') return <td key="owner" className="cell-secondary">{task.owner || '—'}</td>;
+              if (col.key === 'owner') return <td key="owner" className="cell-secondary" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{task.owner || '—'}</td>;
               if (col.key === 'category') return <td key="category"><CategoryBadge categoryId={task.categoryId} categories={categories} /></td>;
               if (col.key === 'dueDate') return (
                 <td key="dueDate" className={isOverdue(task.dueDate, task.done) ? 'cell-overdue' : 'cell-secondary'}>
@@ -119,7 +150,7 @@ function TaskTable({ tasks, onToggle, onEdit, onDelete, categories, showCategory
   );
 }
 
-function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols }) {
+function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories, sortKey, sortDir, onSort, visibleCols, colWidths, onColResize }) {
   const [collapsed, setCollapsed] = useState(false);
   return (
     <div className="group-section">
@@ -131,7 +162,7 @@ function CollapsibleGroup({ id, group, onToggle, onEdit, onDelete, categories, s
       </button>
       {!collapsed && (
         <div className="table-wrap">
-          <TaskTable tasks={group.tasks} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} />
+          <TaskTable tasks={group.tasks} onToggle={onToggle} onEdit={onEdit} onDelete={onDelete} categories={categories} showCategory={false} sortKey={sortKey} sortDir={sortDir} onSort={onSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={onColResize} />
         </div>
       )}
     </div>
@@ -158,6 +189,11 @@ export default function App() {
   const [sortDir, setSortDir] = useState('asc');
   const [visibleCols, setVisibleCols] = useState(['name','owner','category','dueDate','priority','lastUpdate','notes']);
   const [showColPicker, setShowColPicker] = useState(false);
+  const [colWidths, setColWidths] = useState({});
+
+  const handleColResize = useCallback((key, width) => {
+    setColWidths(prev => ({ ...prev, [key]: width }));
+  }, []);
 
   useEffect(() => {
     // Get initial session
@@ -426,7 +462,7 @@ export default function App() {
               </div>
             )}
             {groups && groups.map(([id, group]) => (
-              <CollapsibleGroup key={id} id={id} group={group} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} />
+              <CollapsibleGroup key={id} id={id} group={group} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             ))}
           </div>
         ) : (
@@ -438,7 +474,7 @@ export default function App() {
                 <button className="btn-ghost" onClick={openNew}>Add one now</button>
               </div>
             ) : (
-              <TaskTable tasks={filtered} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} />
+              <TaskTable tasks={filtered} onToggle={handleToggle} onEdit={openEdit} onDelete={handleDelete} categories={categories} showCategory={true} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} visibleCols={visibleCols} colWidths={colWidths} onColResize={handleColResize} />
             )}
           </div>
         )}
