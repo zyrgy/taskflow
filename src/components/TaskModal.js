@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 const PRIORITIES = ['high', 'medium', 'low'];
 const STATUSES = ['Open', 'In progress', 'Done', 'Stuck'];
 
-export default function TaskModal({ task, categories, onSave, onClose }) {
+export default function TaskModal({ task, categories, allowedUsers, onSave, onClose }) {
   const [form, setForm] = useState(task);
   const nameRef = useRef();
 
@@ -44,7 +44,13 @@ export default function TaskModal({ task, categories, onSave, onClose }) {
             <div style={styles.row2}>
               <div style={styles.field}>
                 <label style={styles.label}>Owner</label>
-                <input type="text" value={form.owner} onChange={e => set('owner', e.target.value)} placeholder="Assign to…" />
+                {allowedUsers && allowedUsers.length > 0
+                  ? <select value={form.owner} onChange={e => set('owner', e.target.value)}>
+                      <option value="">No owner</option>
+                      {allowedUsers.map(email => <option key={email} value={email}>{email}</option>)}
+                    </select>
+                  : <input type="text" value={form.owner} onChange={e => set('owner', e.target.value)} placeholder="Assign to…" />
+                }
               </div>
               <div style={styles.field}>
                 <label style={styles.label}>Category</label>
